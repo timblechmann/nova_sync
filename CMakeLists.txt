@@ -37,16 +37,24 @@ endfunction()
 
 # Project layout
 add_library(nova_sync STATIC
+    include/nova/sync/auto_reset_event.hpp
     include/nova/sync/fair_mutex.hpp
     include/nova/sync/fast_mutex.hpp
+    include/nova/sync/manual_reset_event.hpp
+    include/nova/sync/native_auto_reset_event.hpp
+    include/nova/sync/native_manual_reset_event.hpp
     include/nova/sync/recursive_spinlock_mutex.hpp
     include/nova/sync/shared_spinlock_mutex.hpp
     include/nova/sync/spinlock_mutex.hpp
+    include/nova/sync/timed_auto_reset_event.hpp
+    include/nova/sync/timed_manual_reset_event.hpp
     include/nova/sync/detail/backoff.hpp
     include/nova/sync/detail/compat.hpp
     include/nova/sync/detail/pause.hpp
     source/nova/sync/fair_mutex.cpp
     source/nova/sync/fast_mutex.cpp
+    source/nova/sync/native_auto_reset_event.cpp
+    source/nova/sync/native_manual_reset_event.cpp
     source/nova/sync/recursive_spinlock_mutex.cpp
     source/nova/sync/shared_spinlock_mutex.cpp
     source/nova/sync/spinlock_mutex.cpp
@@ -55,11 +63,17 @@ add_library(nova::sync ALIAS nova_sync)
 
 target_sources(nova_sync PUBLIC FILE_SET HEADERS BASE_DIRS include)
 target_sources(nova_sync PUBLIC FILE_SET HEADERS FILES
+    include/nova/sync/auto_reset_event.hpp
     include/nova/sync/fair_mutex.hpp
     include/nova/sync/fast_mutex.hpp
+    include/nova/sync/manual_reset_event.hpp
+    include/nova/sync/native_auto_reset_event.hpp
+    include/nova/sync/native_manual_reset_event.hpp
     include/nova/sync/recursive_spinlock_mutex.hpp
     include/nova/sync/shared_spinlock_mutex.hpp
     include/nova/sync/spinlock_mutex.hpp
+    include/nova/sync/timed_auto_reset_event.hpp
+    include/nova/sync/timed_manual_reset_event.hpp
     include/nova/sync/detail/backoff.hpp
     include/nova/sync/detail/compat.hpp
     include/nova/sync/detail/pause.hpp
@@ -90,6 +104,8 @@ if(NOVA_SYNC_TESTS)
     add_executable(nova_sync_tests
         test/mutex_test.cpp
         test/mutex_benchmarks.cpp
+        test/event_test.cpp
+        test/event_benchmarks.cpp
     )
     target_link_libraries(nova_sync_tests PRIVATE nova::sync Catch2::Catch2WithMain)
 
