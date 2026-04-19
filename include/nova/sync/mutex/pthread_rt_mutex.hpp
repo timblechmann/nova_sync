@@ -64,7 +64,7 @@ struct priority_ceiling
 /// @tparam Policy  One of `pthread_mutex_policy::priority_ceiling` or
 ///                 `pthread_mutex_policy::priority_inherit`.
 template < pthread_mutex_policy Policy >
-class alignas( detail::hardware_destructive_interference_size ) pthread_rt_mutex
+class pthread_rt_mutex
 {
     pthread_mutex_t mutex_ = PTHREAD_MUTEX_INITIALIZER;
 

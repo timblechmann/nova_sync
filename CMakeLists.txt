@@ -13,6 +13,7 @@ endif()
 
 add_custom_target(nova_sync_project_files SOURCES
     .clang-tidy
+    .gitignore
     .pre-commit-config.yaml
     _clang-format
     Readme.md
@@ -36,17 +37,21 @@ function(nova_sync_install_pmr)
 endfunction()
 
 set(headers
+    include/nova/sync/detail/async_support.hpp
     include/nova/sync/detail/backoff.hpp
     include/nova/sync/detail/compat.hpp
-    include/nova/sync/detail/pause.hpp
-    include/nova/sync/mutex/apple_os_unfair_mutex.hpp
     include/nova/sync/detail/syscall.hpp
+    include/nova/sync/mutex/apple_os_unfair_mutex.hpp
+    include/nova/sync/mutex/async_concepts.hpp
+    include/nova/sync/mutex/boost_asio_support.hpp
     include/nova/sync/mutex/concepts.hpp
     include/nova/sync/mutex/eventfd_mutex.hpp
     include/nova/sync/mutex/fair_mutex.hpp
     include/nova/sync/mutex/fast_mutex.hpp
     include/nova/sync/mutex/kqueue_mutex.hpp
+    include/nova/sync/mutex/libdispatch_support.hpp
     include/nova/sync/mutex/native_async_mutex.hpp
+    include/nova/sync/mutex/qt_support.hpp
     include/nova/sync/mutex/pthread_rt_mutex.hpp
     include/nova/sync/mutex/pthread_spinlock_mutex.hpp
     include/nova/sync/mutex/recursive_spinlock_mutex.hpp
@@ -58,6 +63,7 @@ set(headers
 )
 
 set(sources
+    source/nova/sync/detail/syscall.cpp
     source/nova/sync/mutex/eventfd_mutex.cpp
     source/nova/sync/mutex/fair_mutex.cpp
     source/nova/sync/mutex/fast_mutex.cpp
@@ -115,26 +121,50 @@ if(NOVA_SYNC_TESTS)
         )
     endif()
 
+    if (NOT TARGET tl::expected)
+        nova_sync_install_pmr()
+        CPMAddPackage(
+            NAME expected
+            GITHUB_REPOSITORY TartanLlama/expected
+            VERSION 1.3.1
+            OPTIONS "EXPECTED_BUILD_TESTS OFF"
+        )
+    endif()
 
     add_executable(nova_sync_tests
+        include/nova/sync/mutex/boost_asio_support.hpp # to make clangd happy
+        include/nova/sync/mutex/async_concepts.hpp
+        include/nova/sync/mutex/libdispatch_support.hpp
+        include/nova/sync/mutex/qt_support.hpp
+
         test/mutex_types.hpp
         test/mutex_test.cpp
         test/mutex_benchmarks.cpp
-        test/mutex_async_test.cpp
+        test/mutex_async_asio_test.cpp
     )
-    target_link_libraries(nova_sync_tests PRIVATE nova::sync Catch2::Catch2WithMain)
-    target_link_libraries(nova_sync_tests PRIVATE Boost::asio)
 
     if(APPLE)
         enable_language(OBJCXX)
-        set_source_files_properties(test/mutex_async_test.cpp PROPERTIES LANGUAGE OBJCXX)
+        target_sources(nova_sync_tests PRIVATE test/mutex_async_libdispatch_test.mm)
+        if(FALSE)
+            target_compile_options(nova_sync_tests PRIVATE
+                $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>
+            )
+            # Ensure Objective-C runtime is linked when building ObjC++ tests under ARC
+            target_link_libraries(nova_sync_tests PRIVATE "-lobjc")
+        endif()
     endif()
 
+    target_link_libraries(nova_sync_tests PRIVATE nova::sync Catch2::Catch2WithMain)
+    target_link_libraries(nova_sync_tests PRIVATE Boost::asio)
+    target_link_libraries(nova_sync_tests PRIVATE tl::expected)
+
     # for benchmarking QMutex
-    find_package(Qt6 COMPONENTS Core)
+    find_package(Qt6 COMPONENTS Core QUIET)
     if(TARGET Qt6::Core)
         target_link_libraries(nova_sync_tests PRIVATE Qt6::Core)
         target_compile_definitions(nova_sync_tests PRIVATE NOVA_SYNC_HAS_QT=1)
+        target_sources(nova_sync_tests PRIVATE test/mutex_async_qt_test.cpp)
     endif()
 
     enable_testing()

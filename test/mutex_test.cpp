@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <atomic>
 #include <future>
+#include <latch>
 #include <mutex>
 #include <thread>
 #include <type_traits>
@@ -103,7 +104,7 @@ TEMPLATE_TEST_CASE( "mutex implementations",
         REQUIRE( counter.load() == int( threads ) );
     }
 
-    // Tests specific to the recursive_spinlock_mutex implementation
+    // Tests specific to recursive_mutex types
     if constexpr ( nova::sync::concepts::recursive_mutex< mutex_t > ) {
         SECTION( "recursive try_lock in same thread" )
         {
@@ -153,7 +154,18 @@ TEMPLATE_TEST_CASE( "mutex implementations",
         }
     }
 
-    // Tests specific to the shared_spinlock_mutex implementation
+    if constexpr ( !nova::sync::concepts::recursive_mutex< mutex_t > ) {
+        SECTION( "non_recursive try_lock in same thread" )
+        {
+            // First lock -> owned by this thread
+            REQUIRE( m.try_lock() );
+            // try_lock should not succeed for the same owner
+            REQUIRE( !m.try_lock() );
+            m.unlock();
+        }
+    }
+
+    // Tests specific to shared_mutex types
     if constexpr ( nova::sync::concepts::shared_mutex< mutex_t > ) {
         SECTION( "shared locks allow concurrent readers" )
         {

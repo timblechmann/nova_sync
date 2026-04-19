@@ -77,3 +77,13 @@ inline int poll_intr( struct pollfd* fds, nfds_t nfds, std::chrono::milliseconds
 } // namespace nova::sync::detail
 
 #endif
+
+namespace nova::sync::detail {
+
+#if defined( __linux__ ) || defined( __APPLE__ )
+int duplicate_native_handle( int fd ) noexcept;
+#elif defined( _WIN32 )
+void* duplicate_native_handle( void* handle ) noexcept;
+#endif
+
+} // namespace nova::sync::detail

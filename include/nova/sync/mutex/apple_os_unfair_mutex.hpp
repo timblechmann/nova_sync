@@ -17,7 +17,7 @@ namespace nova::sync {
 
 /// @brief High-performance mutex using Apple's `os_unfair_lock`.
 ///
-class alignas( detail::hardware_destructive_interference_size ) OS_UNFAIR_LOCK_AVAILABILITY apple_os_unfair_mutex
+class OS_UNFAIR_LOCK_AVAILABILITY apple_os_unfair_mutex
 {
 public:
     /// @brief Initialises the lock in the unlocked state.

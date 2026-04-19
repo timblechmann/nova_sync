@@ -32,38 +32,72 @@ moderately-contended scenarios.
 Ticket lock implementation guaranteeing FIFO lock acquisition order. Prevents starvation and provides predictable fair
 scheduling under high contention.
 
-### Platform-specific async mutexes
-
-`win32_mutex`, `kqueue_mutex`, and `eventfd_mutex` (and their cross-platform alias `native_async_mutex`)
-expose native OS handles (Win32 `HANDLE`, kqueue fd, eventfd respectively) enabling integration with event loops
-(Boost.Asio, epoll, etc.).
-
-**Example:**
-
-```cpp
-nova::sync::native_async_mutex async_mtx;
-
-void wait_for_lock() {
-    while ( !async_mtx.try_lock() ) {
-        // Register this thread as an async waiter
-        auto guard = async_mtx.make_async_wait_guard();
-
-        // Wait on guard.native_handle() using an event loop
-        // (e.g. epoll, kqueue, WaitForSingleObject, or Boost.Asio)
-        my_event_loop.wait_readable( guard.native_handle() );
-    }
-
-    // Lock acquired
-    // ... execute critical section ...
-    async_mtx.unlock();
-}
-```
-
 ### POSIX real-time mutexes
 
 Priority ceiling and inheritance protocols prevent priority inversion by temporarily boosting the lock holder's priority
 to the highest waiter's level. Significantly higher locking overhead; suitable only for real-time systems where priority
 inversion avoidance is critical.
+
+### Platform-specific async mutexes
+
+`win32_mutex`, `kqueue_mutex`, and `eventfd_mutex` (and their cross-platform alias `native_async_mutex`)
+expose native OS handles (Win32 `HANDLE`, kqueue fd, eventfd respectively) enabling integration with event loops
+(Boost.Asio, libdispatch, epoll, Qt, etc.).
+
+The ready-made integration headers use the following handler convention:
+The ready-made integration headers use an "expected"-style handler
+convention: handlers receive an `expected<std::unique_lock<Mutex>,
+std::error_code>` (`std::expected` or `tl::expected`). On success the
+expected holds a locked `unique_lock`; on error it holds the error code.
+
+```cpp
+void handler(expected<std::unique_lock<Mutex>, std::error_code> result);
+```
+
+**Boost.Asio — callback:**
+
+```cpp
+#include <nova/sync/mutex/boost_asio_support.hpp>
+
+nova::sync::native_async_mutex mtx;
+boost::asio::io_context        ioc;
+
+// Non-cancellable:
+nova::sync::async_acquire(ioc, mtx,
+    [](auto result) {
+        if (!result) return; // unexpected error
+        auto& lock = *result; // lock.owns_lock() == true — critical section here
+        // lock releases the mutex automatically on scope exit
+    });
+
+// Cancellable:
+auto handle = nova::sync::async_acquire_cancellable(ioc, mtx,
+    [](auto result) {
+        if (!result) {
+            if (result.error() == std::errc::operation_canceled) return; // cancelled
+            return; // other error
+        }
+        auto& lock = *result; // lock.owns_lock() == true
+    });
+handle.cancel(); // abort the pending wait from any thread
+```
+
+**Boost.Asio — future:**
+
+```cpp
+#include <nova/sync/mutex/boost_asio_support.hpp>
+
+nova::sync::native_async_mutex mtx;
+boost::asio::io_context        ioc;
+
+auto [descriptor, fut] = nova::sync::async_acquire(ioc, mtx);
+// descriptor keeps the wait alive; fut becomes ready when the lock is acquired
+
+std::unique_lock lock = fut.get(); // blocks until acquired; lock.owns_lock() == true
+
+// To cancel: descriptor->cancel(); // fut will never become ready
+```
+
 
 ### Benchmarks
 

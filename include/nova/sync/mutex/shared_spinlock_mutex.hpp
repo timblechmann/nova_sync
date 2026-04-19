@@ -10,7 +10,7 @@
 namespace nova::sync {
 
 /// @brief Spinlock-based shared mutex.
-class alignas( detail::hardware_destructive_interference_size ) shared_spinlock_mutex
+class shared_spinlock_mutex
 {
     // 32-bit State Bitmask Layout:
     // Bit 31: Exclusive Write Lock Active

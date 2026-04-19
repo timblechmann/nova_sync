@@ -15,7 +15,7 @@
 namespace nova::sync {
 
 #ifdef NOVA_SYNC_HAS_PTHREAD_SPINLOCK
-class alignas( detail::hardware_destructive_interference_size ) pthread_spinlock_mutex
+class pthread_spinlock_mutex
 {
     pthread_spinlock_t lock_;
 

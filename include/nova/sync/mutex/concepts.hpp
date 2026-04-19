@@ -7,6 +7,7 @@
 #include <concepts>
 #include <mutex>
 #include <type_traits>
+#include <utility>
 
 namespace nova::sync::concepts {
 
@@ -83,13 +84,6 @@ concept native_async_mutex = mutex< M > && requires( M& m ) {
     // The OS primitive (fd, HANDLE, …) used to signal waiters.
     typename M::native_handle_type;
     { std::as_const( m ).native_handle() } -> std::same_as< typename M::native_handle_type >;
-
-    // Single-use RAII guard: registers a waiter on construction, drains the
-    // notification and unregisters on destruction.  Use native_handle() on the
-    // guard to obtain the fd / HANDLE to register with your event loop.
-    typename M::async_wait_guard;
-    { m.make_async_wait_guard() } -> std::same_as< typename M::async_wait_guard >;
-    { m.make_async_wait_guard().native_handle() } -> std::same_as< typename M::native_handle_type >;
 };
 
 } // namespace nova::sync::concepts

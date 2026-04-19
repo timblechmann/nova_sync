@@ -10,7 +10,7 @@
 namespace nova::sync {
 
 /// @brief Spinlock-based mutex.
-class alignas( detail::hardware_destructive_interference_size ) spinlock_mutex
+class spinlock_mutex
 {
     std::atomic< bool > locked_ { false };
 

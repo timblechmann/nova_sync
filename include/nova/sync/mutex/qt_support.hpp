@@ -1,0 +1,503 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2026 Tim Blechmann
+
+#pragma once
+
+/// @file qt_support.hpp
+///
+/// Asynchronous mutex acquisition helpers built on the Qt event loop.
+///
+/// Availability
+/// ------------
+/// Requires Qt 5 or Qt 6 with a running `QCoreApplication` event loop on the
+/// provided context thread.
+///
+/// Integration
+/// -----------
+/// - **POSIX** (Linux / macOS): uses `QSocketNotifier` in `Read` mode watching
+///   the mutex's native file descriptor (eventfd on Linux, kqueue fd on macOS).
+///   Readability signals that `unlock()` was called; `try_lock()` is then
+///   attempted with automatic re-registration on failure.
+/// - **Windows**: uses `QWinEventNotifier` watching the Win32 mutex HANDLE.
+///   `RegisterWaitForSingleObject` semantics apply: a successful notification
+///   means the caller already owns the mutex.
+///
+/// Handler signature
+/// -----------------
+/// All callbacks follow the same convention:
+///
+/// @code
+///   void handler(expected<std::unique_lock<Mutex>, std::error_code> result);
+/// @endcode
+///
+/// where `expected` is `std::expected` (C++23) or `tl::expected` (C++20+).
+///
+/// - **Success** (`result.has_value()`): `result->owns_lock() == true`.
+/// - **Cancellation / error** (`!result.has_value()`): Lock not owned;
+///   `result.error()` holds the error code (`errc::operation_canceled`).
+
+#include <nova/sync/mutex/async_concepts.hpp>
+
+#if defined( NOVA_SYNC_HAS_EXPECTED ) && __has_include( <QCoreApplication> )
+
+#    include <atomic>
+#    include <future>
+#    include <memory>
+#    include <mutex>
+#    include <system_error>
+
+#    include <QtCore/QObject>
+#    include <QtCore/QPointer>
+#    include <QtCore/QThread>
+
+#    if defined( __linux__ ) || defined( __APPLE__ )
+#        include <QtCore/QSocketNotifier>
+#    elif defined( _WIN32 )
+#        include <QtCore/QWinEventNotifier>
+#    endif
+
+#    include <nova/sync/detail/async_support.hpp>
+#    include <nova/sync/detail/syscall.hpp>
+
+namespace nova::sync {
+
+// ---------------------------------------------------------------------------
+// detail
+// ---------------------------------------------------------------------------
+
+namespace detail {
+
+// Platform-specific notifier alias
+#    if defined( __linux__ ) || defined( __APPLE__ )
+using QtNotifier = QSocketNotifier;
+#    elif defined( _WIN32 )
+using QtNotifier = QWinEventNotifier;
+#    endif
+
+inline void delete_notifier( QtNotifier* notifier )
+{
+    if ( !notifier )
+        return;
+
+    notifier->disconnect();
+
+    if ( notifier->thread()->isCurrentThread() )
+        delete notifier;
+    else
+        notifier->deleteLater();
+}
+
+// ---------------------------------------------------------------------------
+// Non-cancellable async acquire op
+// ---------------------------------------------------------------------------
+
+template < typename Mutex, typename Handler >
+struct qt_acquire_op : std::enable_shared_from_this< qt_acquire_op< Mutex, Handler > >
+{
+    Mutex&                 mtx_;
+    QObject*               context_;
+    Handler                handler_;
+    QPointer< QtNotifier > notifier_;
+#    if defined( __linux__ ) || defined( __APPLE__ )
+    detail::scoped_file_descriptor dup_fd_;
+#    endif
+
+    qt_acquire_op( Mutex& mtx, QObject* context, Handler&& handler ) :
+        mtx_( mtx ),
+        context_( context ),
+        handler_( std::forward< Handler >( handler ) )
+    {}
+
+    ~qt_acquire_op()
+    {
+        delete_notifier( notifier_ );
+    }
+
+    void start()
+    {
+        if ( mtx_.try_lock() ) {
+            deliver_success();
+            return;
+        }
+
+        create_and_arm_notifier();
+    }
+
+private:
+    void deliver_success()
+    {
+        QMetaObject::invokeMethod( context_, [ self = this->shared_from_this() ]() {
+            invoke_with_lock( self->handler_, std::unique_lock< Mutex >( self->mtx_, std::adopt_lock ) );
+        } );
+    }
+
+    void create_and_arm_notifier()
+    {
+#    if defined( __linux__ ) || defined( __APPLE__ )
+        dup_fd_ = detail::scoped_file_descriptor::from_dup( mtx_.native_handle() );
+        if ( !dup_fd_ )
+            return; // dup failed, can't proceed
+
+        notifier_ = new QSocketNotifier( dup_fd_.get(), QSocketNotifier::Read, context_ );
+#    elif defined( _WIN32 )
+        notifier_ = new QWinEventNotifier( mtx_.native_handle(), context_ );
+#    endif
+
+        QObject::connect( notifier_, &QtNotifier::activated, [ self = this->shared_from_this() ] {
+            self->on_notified();
+        } );
+        notifier_->setEnabled( true );
+    }
+
+    void on_notified()
+    {
+        if ( notifier_ )
+            notifier_->setEnabled( false );
+
+        if ( platform_try_acquire_after_wait( mtx_ ) ) {
+            // Successfully acquired — notify and deliver result
+            if ( notifier_ ) {
+                delete_notifier( notifier_ );
+                notifier_ = nullptr;
+            }
+            deliver_success();
+        } else {
+            // Spurious wakeup — re-arm notifier
+            if ( notifier_ )
+                notifier_->setEnabled( true );
+        }
+    }
+};
+
+// ---------------------------------------------------------------------------
+// Cancellable async acquire op
+// ---------------------------------------------------------------------------
+
+template < typename Mutex, typename Handler >
+struct qt_acquire_cancellable_op : std::enable_shared_from_this< qt_acquire_cancellable_op< Mutex, Handler > >
+{
+    Mutex&                 mtx_;
+    QObject*               context_;
+    Handler                handler_;
+    QPointer< QtNotifier > notifier_;
+    std::atomic< bool >    cancellation_requested_ { false };
+    std::atomic< bool >    handler_invoked_ { false };
+#    if defined( __linux__ ) || defined( __APPLE__ )
+    detail::scoped_file_descriptor dup_fd_;
+#    endif
+
+    qt_acquire_cancellable_op( Mutex& mtx, QObject* context, Handler&& handler ) :
+        mtx_( mtx ),
+        context_( context ),
+        handler_( std::forward< Handler >( handler ) )
+    {}
+
+    ~qt_acquire_cancellable_op()
+    {
+        delete_notifier( notifier_ );
+    }
+
+    void cancel()
+    {
+        cancellation_requested_.store( true, std::memory_order_release );
+
+        auto self = this->shared_from_this();
+        QMetaObject::invokeMethod( context_, [ self ] {
+            if ( self->notifier_ ) {
+                delete_notifier( self->notifier_ );
+                self->notifier_ = nullptr;
+            }
+            self->deliver_cancellation();
+        } );
+    }
+
+    void start()
+    {
+        if ( is_cancelled() ) {
+            deliver_cancellation();
+            return;
+        }
+
+        if ( mtx_.try_lock() ) {
+            // Double-check cancel flag after acquiring
+            if ( is_cancelled() ) {
+                mtx_.unlock();
+                deliver_cancellation();
+                return;
+            }
+
+            deliver_success();
+            return;
+        }
+
+        create_and_arm_notifier();
+    }
+
+private:
+    bool is_cancelled() const noexcept
+    {
+        return cancellation_requested_.load( std::memory_order_acquire );
+    }
+
+    bool try_mark_invoked() noexcept
+    {
+        bool expected = false;
+        return handler_invoked_.compare_exchange_strong( expected,
+                                                         true,
+                                                         std::memory_order_release,
+                                                         std::memory_order_acquire );
+    }
+
+    void deliver_cancellation()
+    {
+        if ( try_mark_invoked() ) {
+            QMetaObject::invokeMethod( context_, [ self = this->shared_from_this() ] {
+                invoke_with_error< Mutex >( self->handler_, std::make_error_code( std::errc::operation_canceled ) );
+            } );
+        }
+    }
+
+    void deliver_success()
+    {
+        if ( try_mark_invoked() ) {
+            QMetaObject::invokeMethod( context_, [ self = this->shared_from_this() ] {
+                invoke_with_lock( self->handler_, std::unique_lock< Mutex >( self->mtx_, std::adopt_lock ) );
+            } );
+        }
+    }
+
+    void create_and_arm_notifier()
+    {
+#    if defined( __linux__ ) || defined( __APPLE__ )
+        dup_fd_ = detail::scoped_file_descriptor::from_dup( mtx_.native_handle() );
+        if ( !dup_fd_ )
+            return; // dup failed, can't proceed
+
+        notifier_ = new QSocketNotifier( dup_fd_.get(), QSocketNotifier::Read, context_ );
+#    elif defined( _WIN32 )
+        notifier_ = new QWinEventNotifier( mtx_.native_handle(), context_ );
+#    endif
+
+        QObject::connect( notifier_, &QSocketNotifier::activated, [ self = this->shared_from_this() ] {
+            self->on_notified();
+        } );
+        notifier_->setEnabled( true );
+    }
+
+    void on_notified()
+    {
+        if ( notifier_ )
+            notifier_->setEnabled( false );
+
+        if ( is_cancelled() ) {
+            if ( notifier_ ) {
+                delete_notifier( notifier_ );
+                notifier_ = nullptr;
+            }
+            deliver_cancellation();
+            return;
+        }
+
+        if ( platform_try_acquire_after_wait( mtx_ ) ) {
+            // Double-check cancel race after acquiring
+            if ( is_cancelled() ) {
+                mtx_.unlock();
+                if ( notifier_ ) {
+                    delete_notifier( notifier_ );
+                    notifier_ = nullptr;
+                }
+                deliver_cancellation();
+                return;
+            }
+            if ( notifier_ ) {
+                delete_notifier( notifier_ );
+                notifier_ = nullptr;
+            }
+            deliver_success();
+        } else {
+            if ( notifier_ )
+                notifier_->setEnabled( true );
+        }
+    }
+};
+
+} // namespace detail
+
+// ---------------------------------------------------------------------------
+// Public API — cancellable handle
+// ---------------------------------------------------------------------------
+
+/// @brief Opaque handle returned by `qt_async_acquire_cancellable`.
+///
+/// Exposes a `cancel()` method. Destroying the handle automatically cancels
+/// any pending wait, delivering `errc::operation_canceled` to the handler.
+///
+/// Thread safety: `cancel()` and the destructor are safe to call from any thread.
+template < typename Mutex, typename Handler >
+class qt_acquire_handle
+{
+public:
+    qt_acquire_handle() = default;
+
+    explicit qt_acquire_handle( std::shared_ptr< detail::qt_acquire_cancellable_op< Mutex, Handler > > op ) :
+        op_( std::move( op ) )
+    {}
+
+    qt_acquire_handle( qt_acquire_handle&& other ) noexcept :
+        op_( std::move( other.op_ ) )
+    {}
+    qt_acquire_handle& operator=( qt_acquire_handle&& other ) noexcept
+    {
+        if ( this != &other ) {
+            cancel();
+            op_ = std::move( other.op_ );
+        }
+        return *this;
+    }
+
+    qt_acquire_handle( const qt_acquire_handle& )            = delete;
+    qt_acquire_handle& operator=( const qt_acquire_handle& ) = delete;
+
+    ~qt_acquire_handle()
+    {
+        cancel();
+    }
+
+    /// @brief Cancel the pending acquire. Safe to call from any thread. Idempotent.
+    void cancel()
+    {
+        if ( op_ ) {
+            op_->cancel();
+            op_.reset();
+        }
+    }
+
+    explicit operator bool() const noexcept
+    {
+        return op_ != nullptr;
+    }
+
+private:
+    std::shared_ptr< detail::qt_acquire_cancellable_op< Mutex, Handler > > op_;
+};
+
+// ---------------------------------------------------------------------------
+// Public API — free functions
+// ---------------------------------------------------------------------------
+
+/// @brief Asynchronously acquires @p mtx using the Qt event loop and invokes
+///        @p handler with an `expected<unique_lock, error_code>` result.
+///
+/// The handler is called exactly once on the event-loop thread associated with
+/// @p context (a thread in which @p context's event loop runs) with the
+/// signature:
+///
+/// @code
+///   void handler(expected<std::unique_lock<Mutex>, std::error_code> result);
+/// @endcode
+///
+/// - **Success** (`result.has_value()`): `result->owns_lock() == true`.
+/// - **Error** (`!result.has_value()`): `result.error()` holds the error code.
+///
+/// Lifetime
+/// --------
+/// - @p mtx must remain live until @p handler fires.
+/// - @p context must remain live until @p handler fires and must be an object
+///   whose event loop is running (typically `QCoreApplication::instance()`).
+///
+/// Cancellation
+/// ------------
+/// Use `qt_async_acquire_cancellable` if you need to abort a pending wait.
+///
+/// @param mtx     Mutex with a `native_handle()` method (e.g. `native_async_mutex`).
+/// @param context QObject whose thread's event loop will process the operation.
+/// @param handler Callable invoked with `expected<std::unique_lock<Mutex>, std::error_code>`.
+template < typename Mutex, typename Handler >
+void qt_async_acquire( Mutex& mtx, QObject* context, Handler&& handler )
+    requires detail::invocable_with_expected< Handler, Mutex >
+{
+    using state_type = detail::qt_acquire_op< Mutex, std::decay_t< Handler > >;
+    auto state       = std::make_shared< state_type >( mtx, context, std::forward< Handler >( handler ) );
+    state->start();
+}
+
+/// @brief Asynchronously acquires @p mtx using the Qt event loop, returning a
+///        cancellable handle.
+///
+/// Identical to `qt_async_acquire` except that a `qt_acquire_handle` is
+/// returned. Calling `handle.cancel()` or destroying the handle aborts the
+/// pending wait, causing @p handler to be invoked with `errc::operation_canceled`.
+///
+/// Example
+/// -------
+/// @code
+///   auto handle = nova::sync::qt_async_acquire_cancellable(mtx, context,
+///       [](auto result) {
+///           if (result) {
+///               // lock acquired
+///           } else if (result.error() == std::errc::operation_canceled) {
+///               // cancelled
+///           }
+///       });
+///   handle.cancel();
+/// @endcode
+template < typename Mutex, typename Handler >
+auto qt_async_acquire_cancellable( Mutex& mtx, QObject* context, Handler&& handler )
+    -> qt_acquire_handle< Mutex, std::decay_t< Handler > >
+    requires detail::invocable_with_expected< Handler, Mutex >
+{
+    using state_type = detail::qt_acquire_cancellable_op< Mutex, std::decay_t< Handler > >;
+    auto op          = std::make_shared< state_type >( mtx, context, std::forward< Handler >( handler ) );
+    op->start();
+    return qt_acquire_handle< Mutex, std::decay_t< Handler > > { op };
+}
+
+/// @brief Asynchronously acquires @p mtx and returns a future with std::future.
+///
+/// If the mutex is immediately available (`try_lock()` succeeds), the
+/// returned future is already ready and holds a locked `unique_lock`.
+/// Otherwise the acquisition is performed asynchronously on the event loop;
+/// once the mutex is taken the promise is fulfilled with a `unique_lock` that owns it.
+///
+/// @param mtx     Mutex with a `native_handle()` method.
+/// @param context QObject whose thread's event loop will process the operation.
+/// @return `std::future<std::unique_lock<Mutex>>` that becomes ready when acquired.
+template < typename Mutex >
+std::future< std::unique_lock< Mutex > > qt_async_acquire( Mutex& mtx, QObject* context )
+{
+    using promise_t = std::promise< std::unique_lock< Mutex > >;
+
+    if ( mtx.try_lock() ) {
+        promise_t promise;
+        promise.set_value( std::unique_lock( mtx, std::adopt_lock ) );
+        return promise.get_future();
+    }
+
+    auto promise = std::make_shared< promise_t >();
+    auto future  = promise->get_future();
+
+    auto do_wait = std::make_shared< std::function< void() > >();
+    *do_wait     = [ &, promise = std::move( promise ), do_wait, context ]() mutable {
+        auto handler = [ promise = std::move( promise ), do_wait ]( auto result ) mutable {
+            if ( result ) {
+                promise->set_value( std::move( *result ) );
+                *do_wait = nullptr; // break cycle
+            } else {
+                // spurious wakeup, retry
+                std::invoke( *do_wait );
+            }
+        };
+
+        nova::sync::qt_async_acquire( mtx, context, std::move( handler ) );
+    };
+
+    QMetaObject::invokeMethod( context, [ do_wait = std::move( do_wait ) ] {
+        std::invoke( *do_wait );
+    } );
+
+    return future;
+}
+
+} // namespace nova::sync
+
+#endif // defined( NOVA_SYNC_HAS_EXPECTED ) && __has_include( <QCoreApplication> )

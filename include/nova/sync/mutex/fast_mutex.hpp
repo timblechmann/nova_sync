@@ -10,7 +10,7 @@
 namespace nova::sync {
 
 /// @brief Fast mutex with spinning and park/unpark.
-class alignas( detail::hardware_destructive_interference_size ) fast_mutex
+class fast_mutex
 {
 public:
     /// @brief Constructs an unlocked fast mutex.
@@ -50,7 +50,7 @@ private:
     // State layout:
     // Bit 0     : Lock status (0 = Free, 1 = Locked)
     // Bits 1-31 : Number of sleeping threads (Waiter count)
-    alignas( 64 ) std::atomic< uint32_t > state_ { 0 };
+    std::atomic< uint32_t > state_ { 0 };
 
     void lock_slow( uint32_t expected ) noexcept;
 };

@@ -17,7 +17,7 @@ namespace nova::sync {
 
 /// @brief Recursive mutex implemented using Win32 CRITICAL_SECTION.
 ///
-class alignas( detail::hardware_destructive_interference_size ) win32_recursive_mutex
+class win32_recursive_mutex
 {
 public:
     /// @brief Constructs and initialises the CRITICAL_SECTION with a spin count.

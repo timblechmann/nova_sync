@@ -24,7 +24,7 @@ namespace nova::sync {
 ///
 /// ### Satisfies
 /// - `nova::sync::concepts::mutex`
-class alignas( detail::hardware_destructive_interference_size ) win32_srw_mutex
+class win32_srw_mutex
 {
 public:
     /// @brief Initialises the SRW lock.

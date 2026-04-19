@@ -11,7 +11,7 @@ namespace nova::sync {
 
 /// @brief Fair mutex.
 /// @details Uses a ticket lock algorithm to ensure FIFO fairness.
-class alignas( detail::hardware_destructive_interference_size ) fair_mutex
+class fair_mutex
 {
 public:
     /// @brief Constructs an unlocked fair mutex.

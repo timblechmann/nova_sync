@@ -12,7 +12,7 @@
 namespace nova::sync {
 
 /// @brief Recursive spinlock-based mutex.
-class alignas( detail::hardware_destructive_interference_size ) recursive_spinlock_mutex
+class recursive_spinlock_mutex
 {
     std::atomic< std::thread::id > owner_ { std::thread::id {} };
     std::size_t                    recursion_count_ { 0 };
