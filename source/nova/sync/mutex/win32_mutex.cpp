@@ -39,11 +39,6 @@ bool win32_mutex::try_lock() noexcept
     return ::WaitForSingleObject( static_cast< HANDLE >( handle_ ), 0 ) == WAIT_OBJECT_0;
 }
 
-bool win32_mutex::try_lock_ms( unsigned long timeout_ms ) noexcept
-{
-    return ::WaitForSingleObject( static_cast< HANDLE >( handle_ ), timeout_ms ) == WAIT_OBJECT_0;
-}
-
 void win32_mutex::unlock() noexcept
 {
     ::ReleaseMutex( static_cast< HANDLE >( handle_ ) );

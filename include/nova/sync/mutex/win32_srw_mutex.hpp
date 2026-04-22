@@ -17,13 +17,6 @@ namespace nova::sync {
 
 /// @brief Ultra-lightweight non-recursive, non-fair mutex using Win32 SRW lock.
 ///
-/// `SRWLOCK` is the smallest and fastest Win32 synchronization primitive
-/// (pointer-sized, no kernel event allocation). Suitable for uncontended and
-/// lightly-contended locks. Does not support recursive or shared modes via
-/// this wrapper.
-///
-/// ### Satisfies
-/// - `nova::sync::concepts::mutex`
 class win32_srw_mutex
 {
 public:

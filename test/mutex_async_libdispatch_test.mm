@@ -6,7 +6,7 @@
 #include <catch2/catch_all.hpp>
 
 #include <nova/sync/mutex/async_concepts.hpp>
-#include <nova/sync/mutex/libdispatch_support.hpp>
+#include <nova/sync/mutex/support/libdispatch_support.hpp>
 
 #include "mutex_types.hpp"
 

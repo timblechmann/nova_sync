@@ -42,22 +42,23 @@ set(headers
     include/nova/sync/detail/compat.hpp
     include/nova/sync/detail/syscall.hpp
     include/nova/sync/mutex/apple_os_unfair_mutex.hpp
-    include/nova/sync/mutex/boost_asio_support.hpp
+    include/nova/sync/mutex/support/boost_asio_support.hpp
     include/nova/sync/mutex/concepts.hpp
     include/nova/sync/mutex/eventfd_mutex.hpp
     include/nova/sync/mutex/fair_mutex.hpp
     include/nova/sync/mutex/fast_mutex.hpp
     include/nova/sync/mutex/kqueue_mutex.hpp
-    include/nova/sync/mutex/libdispatch_support.hpp
     include/nova/sync/mutex/native_async_mutex.hpp
-    include/nova/sync/mutex/qt_support.hpp
+    include/nova/sync/mutex/support/libdispatch_support.hpp
     include/nova/sync/mutex/pthread_rt_mutex.hpp
     include/nova/sync/mutex/pthread_spinlock_mutex.hpp
     include/nova/sync/mutex/recursive_spinlock_mutex.hpp
     include/nova/sync/mutex/shared_spinlock_mutex.hpp
     include/nova/sync/mutex/spinlock_mutex.hpp
+    include/nova/sync/mutex/support/qt_support.hpp
+    include/nova/sync/mutex/win32_critical_section_mutex.hpp
+    include/nova/sync/mutex/win32_event_mutex.hpp
     include/nova/sync/mutex/win32_mutex.hpp
-    include/nova/sync/mutex/win32_recursive_mutex.hpp
     include/nova/sync/mutex/win32_srw_mutex.hpp
 )
 
@@ -71,8 +72,9 @@ set(sources
     source/nova/sync/mutex/shared_spinlock_mutex.cpp
     source/nova/sync/mutex/spinlock_mutex.cpp
 
+    source/nova/sync/mutex/win32_critical_section_mutex.cpp
+    source/nova/sync/mutex/win32_event_mutex.cpp
     source/nova/sync/mutex/win32_mutex.cpp
-    source/nova/sync/mutex/win32_recursive_mutex.cpp
     source/nova/sync/mutex/win32_srw_mutex.cpp
 )
 
@@ -131,9 +133,9 @@ if(NOVA_SYNC_TESTS)
     endif()
 
     add_executable(nova_sync_tests
-        include/nova/sync/mutex/boost_asio_support.hpp # to make clangd happy
-        include/nova/sync/mutex/libdispatch_support.hpp
-        include/nova/sync/mutex/qt_support.hpp
+        include/nova/sync/mutex/support/boost_asio_support.hpp # to make clangd happy
+        include/nova/sync/mutex/support/libdispatch_support.hpp
+        include/nova/sync/mutex/support/qt_support.hpp
         include/nova/sync/detail/async_support.hpp
 
         test/mutex_types.hpp

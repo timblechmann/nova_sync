@@ -3,7 +3,7 @@
 
 #include <catch2/catch_all.hpp>
 
-#include <nova/sync/mutex/boost_asio_support.hpp>
+#include <nova/sync/mutex/support/boost_asio_support.hpp>
 
 #include "mutex_types.hpp"
 
@@ -47,7 +47,7 @@ struct asio_runner
 // Context configuration
 // ---------------------------------------------------------------------------
 
-#include <nova/sync/mutex/boost_asio_support.hpp>
+#include <nova/sync/mutex/support/boost_asio_support.hpp>
 
 // ---------------------------------------------------------------------------
 // Boost.Asio tests

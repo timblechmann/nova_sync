@@ -7,7 +7,7 @@
 
 #    include "mutex_types.hpp"
 
-#    include <nova/sync/mutex/qt_support.hpp>
+#    include <nova/sync/mutex/support/qt_support.hpp>
 
 #    include <atomic>
 #    include <chrono>

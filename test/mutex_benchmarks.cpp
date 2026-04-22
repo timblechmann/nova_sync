@@ -59,9 +59,34 @@ TEMPLATE_TEST_CASE( "mutex benchmarks",
     SECTION( "multi-threaded" )
     {
         const unsigned threads        = std::max( 2u, std::thread::hardware_concurrency() );
-        const int      ops_per_thread = 20000; // keep total work reasonable
+        const int      ops_per_thread = 10000; // keep total work reasonable
 
         BENCHMARK( "multi-threaded" )
+        {
+            mutex_t                    m;
+            std::vector< std::thread > ths;
+            ths.reserve( threads );
+            for ( unsigned t = 0; t < threads; ++t ) {
+                ths.emplace_back( [ & ] {
+                    for ( int i = 0; i < ops_per_thread; ++i ) {
+                        m.lock();
+                        work();
+                        m.unlock();
+                    }
+                } );
+            }
+            for ( auto& th : ths )
+                th.join();
+            return 0;
+        };
+    }
+
+    SECTION( "multi-threaded (high contention)" )
+    {
+        const unsigned threads        = std::max( 2u, std::thread::hardware_concurrency() * 2 );
+        const int      ops_per_thread = 10000; // keep total work reasonable
+
+        BENCHMARK( "multi-threaded (high contention)" )
         {
             mutex_t                    m;
             std::vector< std::thread > ths;

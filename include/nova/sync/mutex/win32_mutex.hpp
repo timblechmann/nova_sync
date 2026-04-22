@@ -17,17 +17,15 @@ typedef void* HANDLE;
 
 namespace nova::sync {
 
-/// @brief Non-recursive mutex using Win32 `CreateMutex` kernel object.
-///
-/// The underlying Win32 mutex handle can be duplicated and integrated into
-/// event loops via `WaitForMultipleObjects`, Boost.Asio, or IOCP.
+/// @brief Async-capable mutex implemented via Win32 `CreateMutex` kernel object.
 ///
 class win32_mutex
 {
 public:
+    /// @brief The native handle type — a Win32 HANDLE.
     using native_handle_type = HANDLE;
 
-    /// @brief Constructs an unlocked win32 mutex.
+    /// @brief Constructs an unlocked win32_mutex.
     win32_mutex();
     ~win32_mutex();
     win32_mutex( const win32_mutex& )            = delete;
@@ -43,39 +41,18 @@ public:
     /// @brief Releases the lock and wakes one waiting thread if any.
     void unlock() noexcept;
 
-    /// @brief Attempts to acquire within a timeout duration.
-    template < typename Rep, typename Period >
-    bool try_lock_for( const std::chrono::duration< Rep, Period >& timeout ) noexcept
-    {
-        auto ms = std::chrono::duration_cast< std::chrono::milliseconds >( timeout );
-        return try_lock_until( std::chrono::steady_clock::now() + ms );
-    }
-
-    /// @brief Attempts to acquire until an absolute time point.
-    template < typename Clock, typename Duration >
-    bool try_lock_until( const std::chrono::time_point< Clock, Duration >& deadline ) noexcept
-    {
-        auto now          = Clock::now();
-        auto remaining    = deadline - now;
-        auto remaining_ms = std::chrono::duration_cast< std::chrono::milliseconds >( remaining );
-        if ( remaining_ms.count() < 0 )
-            return try_lock();
-        return try_lock_for( remaining_ms );
-    }
-
-    /// @brief Returns the Win32 HANDLE for async integration.
-    /// when waiting on this handle, the mutex will be signaled when it becomes available. When
-    /// this happens, the mutex will be owned by the calling thread.
+    /// @brief Returns the HANDLE for async integration.
+    ///
+    /// When waiting on this handle, the mutex will be signaled when it becomes available.
+    /// The caller can then attempt to acquire the lock (e.g. via `try_lock()`) and, if
+    /// unsuccessful, re-register for notifications.
     [[nodiscard]] native_handle_type native_handle() const noexcept
     {
         return handle_;
     }
 
-
 private:
     HANDLE handle_ { nullptr };
-
-    bool try_lock_ms( unsigned long timeout_ms ) noexcept;
 };
 
 } // namespace nova::sync
