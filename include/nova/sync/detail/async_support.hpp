@@ -3,7 +3,21 @@
 
 #pragma once
 
-#include <nova/sync/mutex/async_concepts.hpp>
+#include <nova/sync/mutex/concepts.hpp>
+
+#if __cplusplus >= 202302L && __has_include( <expected> )
+#    define NOVA_SYNC_HAS_EXPECTED
+#    define NOVA_SYNC_HAS_STD_EXPECTED
+#    include <expected>
+#endif
+
+#if __has_include( <tl/expected.hpp> )
+#    ifndef NOVA_SYNC_HAS_EXPECTED
+#        define NOVA_SYNC_HAS_EXPECTED
+#    endif
+#    define NOVA_SYNC_HAS_TL_EXPECTED
+#    include <tl/expected.hpp>
+#endif
 
 #if defined( NOVA_SYNC_HAS_EXPECTED )
 
@@ -88,6 +102,8 @@ private:
 };
 #    endif // __linux__ || __APPLE__
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 /// @brief Invoke a handler with a successful expected<unique_lock, error_code> result.
 ///
 /// Dispatches to the appropriate expected implementation (std::expected or
@@ -144,6 +160,8 @@ void invoke_with_error( Handler&& handler, std::errc ec )
     invoke_with_error< Mutex, Handler >( std::forward< Handler >( handler ), std::make_error_code( ec ) );
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 inline bool platform_try_acquire_after_wait( auto& mtx )
 {
 #    if defined( __linux__ ) || defined( __APPLE__ )
@@ -156,6 +174,45 @@ inline bool platform_try_acquire_after_wait( auto& mtx )
     return true; // Already own the lock
 #    endif
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// @brief Register an async waiter with a mutex (if supported).
+///
+/// For mutexes that support the `async_waiter_mutex` concept, increments
+/// the waiter count. For simple mutexes, this is a no-op.
+template < typename Mutex >
+inline void register_async_waiter( Mutex& mtx ) noexcept
+{
+    if constexpr ( concepts::async_waiter_mutex< Mutex > )
+        mtx.add_async_waiter();
+}
+
+/// @brief Unregister an async waiter from a mutex (if supported).
+///
+/// For mutexes that support the `async_waiter_mutex` concept, decrements
+/// the waiter count. For simple mutexes, this is a no-op.
+template < typename Mutex >
+inline void unregister_async_waiter( Mutex& mtx ) noexcept
+{
+    if constexpr ( concepts::async_waiter_mutex< Mutex > )
+        mtx.remove_async_waiter();
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template < typename Handler, typename Mutex >
+concept invocable_with_expected
+    = false // Base case so we can cleanly chain || with macros
+#    ifdef NOVA_SYNC_HAS_STD_EXPECTED
+      || std::invocable< Handler, std::expected< std::unique_lock< Mutex >, std::error_code > >
+#    endif
+#    ifdef NOVA_SYNC_HAS_TL_EXPECTED
+      || std::invocable< Handler, tl::expected< std::unique_lock< Mutex >, std::error_code > >
+#    endif
+    ;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 } // namespace nova::sync::detail

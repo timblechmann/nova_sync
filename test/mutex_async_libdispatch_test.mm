@@ -7,7 +7,8 @@
 
 #include <nova/sync/mutex/async_concepts.hpp>
 #include <nova/sync/mutex/libdispatch_support.hpp>
-#include <nova/sync/mutex/native_async_mutex.hpp>
+
+#include "mutex_types.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -16,14 +17,16 @@
 #include <thread>
 
 using namespace std::chrono_literals;
-using Mtx = nova::sync::native_async_mutex;
 
 // ---------------------------------------------------------------------------
 // libdispatch tests
 // ---------------------------------------------------------------------------
 
-TEST_CASE( "native_async_mutex: explicit expected types", "[native_async_mutex][libdispatch]" )
+TEMPLATE_TEST_CASE( "native_async_mutex: explicit expected types",
+                    "[native_async_mutex][libdispatch]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
+    using Mtx = TestType;
     Mtx              mtx;
     dispatch_queue_t queue = dispatch_queue_create( "test_queue", DISPATCH_QUEUE_SERIAL );
 
@@ -66,8 +69,11 @@ TEST_CASE( "native_async_mutex: explicit expected types", "[native_async_mutex][
     nova::sync::detail::release_dispatch_object( queue );
 }
 
-TEST_CASE( "libdispatch: async acquire fires after unlock", "[native_async_mutex][libdispatch]" )
+TEMPLATE_TEST_CASE( "libdispatch: async acquire fires after unlock",
+                    "[native_async_mutex][libdispatch]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
+    using Mtx = TestType;
     Mtx              mtx;
     dispatch_queue_t queue = dispatch_queue_create( "test_queue", DISPATCH_QUEUE_SERIAL );
 
@@ -98,8 +104,11 @@ TEST_CASE( "libdispatch: async acquire fires after unlock", "[native_async_mutex
     mtx.unlock();
 }
 
-TEST_CASE( "libdispatch: no early wakeup while locked", "[native_async_mutex][libdispatch]" )
+TEMPLATE_TEST_CASE( "libdispatch: no early wakeup while locked",
+                    "[native_async_mutex][libdispatch]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
+    using Mtx = TestType;
     Mtx              mtx;
     dispatch_queue_t queue = dispatch_queue_create( "test_queue", DISPATCH_QUEUE_SERIAL );
 
@@ -130,8 +139,11 @@ TEST_CASE( "libdispatch: no early wakeup while locked", "[native_async_mutex][li
     mtx.unlock();
 }
 
-TEST_CASE( "libdispatch: mutual exclusion with async acquires", "[native_async_mutex][libdispatch]" )
+TEMPLATE_TEST_CASE( "libdispatch: mutual exclusion with async acquires",
+                    "[native_async_mutex][libdispatch]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
+    using Mtx = TestType;
     Mtx              mtx;
     dispatch_queue_t queue = dispatch_queue_create( "test_queue", DISPATCH_QUEUE_SERIAL );
 
@@ -166,8 +178,11 @@ TEST_CASE( "libdispatch: mutual exclusion with async acquires", "[native_async_m
     REQUIRE( max_concurrent == 1 );
 }
 
-TEST_CASE( "libdispatch — cancellation delivers error to handler", "[native_async_mutex][libdispatch]" )
+TEMPLATE_TEST_CASE( "libdispatch — cancellation delivers error to handler",
+                    "[native_async_mutex][libdispatch]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
+    using Mtx = TestType;
     Mtx              mtx;
     dispatch_queue_t queue = dispatch_queue_create( "test_queue", DISPATCH_QUEUE_SERIAL );
 
@@ -197,8 +212,11 @@ TEST_CASE( "libdispatch — cancellation delivers error to handler", "[native_as
     REQUIRE( handler_invoked.load() );
 }
 
-TEST_CASE( "libdispatch — destructor auto-cancels", "[native_async_mutex][libdispatch]" )
+TEMPLATE_TEST_CASE( "libdispatch — destructor auto-cancels",
+                    "[native_async_mutex][libdispatch]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
+    using Mtx = TestType;
     Mtx              mtx;
     dispatch_queue_t queue = dispatch_queue_create( "test_queue", DISPATCH_QUEUE_SERIAL );
 
@@ -229,8 +247,11 @@ TEST_CASE( "libdispatch — destructor auto-cancels", "[native_async_mutex][libd
     REQUIRE( handler_invoked.load() );
 }
 
-TEST_CASE( "libdispatch: future becomes ready after unlock", "[native_async_mutex][libdispatch]" )
+TEMPLATE_TEST_CASE( "libdispatch: future becomes ready after unlock",
+                    "[native_async_mutex][libdispatch]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
+    using Mtx = TestType;
     Mtx              mtx;
     dispatch_queue_t queue = dispatch_queue_create( "test_queue", DISPATCH_QUEUE_SERIAL );
 
@@ -255,8 +276,11 @@ TEST_CASE( "libdispatch: future becomes ready after unlock", "[native_async_mute
     nova::sync::detail::release_dispatch_object( queue );
 }
 
-TEST_CASE( "libdispatch: future ready immediately if mutex available", "[native_async_mutex][libdispatch]" )
+TEMPLATE_TEST_CASE( "libdispatch: future ready immediately if mutex available",
+                    "[native_async_mutex][libdispatch]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
+    using Mtx = TestType;
     Mtx              mtx;
     dispatch_queue_t queue = dispatch_queue_create( "test_queue", DISPATCH_QUEUE_SERIAL );
 

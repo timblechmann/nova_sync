@@ -86,4 +86,19 @@ concept native_async_mutex = mutex< M > && requires( M& m ) {
     { std::as_const( m ).native_handle() } -> std::same_as< typename M::native_handle_type >;
 };
 
+/// @brief Refines `native_async_mutex` with a user-space waiter count.
+///
+/// Types satisfying this concept expose `add_async_waiter()` and
+/// `remove_async_waiter()` so that async integration layers can register
+/// themselves in the waiter count.  This allows `unlock()` to skip the
+/// kernel signal on the uncontended fast path while still notifying the
+/// OS primitive when at least one async waiter is registered.
+///
+/// Modelled by: `eventfd_mutex` (Linux), `fast_kqueue_mutex` (Apple).
+template < typename M >
+concept async_waiter_mutex = native_async_mutex< M > && requires( M& m ) {
+    { m.add_async_waiter() };
+    { m.remove_async_waiter() };
+};
+
 } // namespace nova::sync::concepts

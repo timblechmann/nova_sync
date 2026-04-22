@@ -8,14 +8,6 @@
 /// Asynchronous mutex acquisition helpers built on Apple libdispatch
 /// (Grand Central Dispatch).
 ///
-/// Availability
-/// ------------
-/// Apple platforms (macOS, iOS, …) only, where libdispatch is part of the
-/// system SDK.  Relies on the kqueue-based `native_async_mutex`
-/// (`kqueue_mutex`) whose `native_handle()` returns a kqueue file descriptor.
-/// A `DISPATCH_SOURCE_TYPE_READ` source watches that fd for readability,
-/// which is triggered when `unlock()` posts an `EVFILT_USER` event.
-///
 /// Handler signature
 /// -----------------
 /// All callbacks follow the same convention:
@@ -26,21 +18,27 @@
 ///
 /// where `expected` is `std::expected` (C++23) or `tl::expected` (C++20+).
 ///
-/// - **Success** (`result.has_value()`): `result->owns_lock() == true`.  The
-///   handler holds the mutex; release it via `result->unlock()` or by letting
-///   `result` destruct.
+/// - **Success** (`result.has_value()`): Lock is owned; `result->owns_lock() == true`.
+///   Call `result->unlock()` (or let it destruct) to release.
 /// - **Cancellation / error** (`!result.has_value()`): Lock is not owned;
 ///   `result.error()` contains the error code.
 ///
-/// Spurious wakeups
-/// ----------------
-/// A readable event on the kqueue fd does not guarantee exclusive ownership —
-/// multiple waiters may be woken concurrently and race to acquire the lock.
-/// All helpers in this header handle this transparently by re-registering a
-/// fresh source whenever `try_lock()` fails.  The caller's handler is always
-/// invoked with the lock held (or with an error on cancellation).
+/// Example
+/// -------
+/// @code
+///   nova::sync::native_async_mutex mtx;
+///   dispatch_queue_t queue = dispatch_queue_create("com.example.q",
+///                                                  DISPATCH_QUEUE_SERIAL);
+///
+///   nova::sync::async_acquire(mtx, queue,
+///       [](auto result) {
+///           if (result) {
+///               // lock acquired
+///           }
+///       });
+/// @endcode
 
-#include <nova/sync/mutex/async_concepts.hpp>
+#include <nova/sync/detail/async_support.hpp>
 
 #if defined( __APPLE__ ) && defined( NOVA_SYNC_HAS_EXPECTED )
 
@@ -54,6 +52,7 @@
 #    include <dispatch/dispatch.h>
 
 #    include <nova/sync/detail/async_support.hpp>
+#    include <nova/sync/mutex/concepts.hpp>
 
 namespace nova::sync {
 
@@ -119,6 +118,7 @@ struct dispatch_acquire_state : std::enable_shared_from_this< dispatch_acquire_s
     dispatch_queue_t  queue_;
     Handler           handler_;
     dispatch_source_t src_ {};
+    bool              async_waiter_registered_ { false };
 
     dispatch_acquire_state( Mutex& mtx, dispatch_queue_t queue, Handler&& handler ) :
         mtx_( mtx ),
@@ -128,6 +128,8 @@ struct dispatch_acquire_state : std::enable_shared_from_this< dispatch_acquire_s
 
     ~dispatch_acquire_state()
     {
+        if ( async_waiter_registered_ )
+            detail::unregister_async_waiter( mtx_ );
         if ( src_ )
             release_dispatch_object( src_ );
     }
@@ -141,6 +143,10 @@ struct dispatch_acquire_state : std::enable_shared_from_this< dispatch_acquire_s
             } );
             return;
         }
+
+        // Register as a waiter so unlock() will trigger the kevent
+        detail::register_async_waiter( mtx_ );
+        async_waiter_registered_ = true;
 
         // Create the dispatch source
         src_ = dispatch_source_create( DISPATCH_SOURCE_TYPE_READ,
@@ -184,6 +190,7 @@ struct dispatch_acquire_cancellable_state :
     Handler                                        handler_;
     dispatch_source_t                              src_ {};
     const std::shared_ptr< dispatch_cancel_state > cancel_state_;
+    bool                                           async_waiter_registered_ { false };
 
     dispatch_acquire_cancellable_state( Mutex& mtx, dispatch_queue_t queue, Handler&& handler ) :
         mtx_( mtx ),
@@ -194,6 +201,8 @@ struct dispatch_acquire_cancellable_state :
 
     ~dispatch_acquire_cancellable_state()
     {
+        if ( async_waiter_registered_ )
+            detail::unregister_async_waiter( mtx_ );
         if ( src_ )
             release_dispatch_object( src_ );
     }
@@ -236,6 +245,10 @@ struct dispatch_acquire_cancellable_state :
 
             return;
         }
+
+        // Register as a waiter so unlock() will trigger the kevent
+        detail::register_async_waiter( mtx_ );
+        async_waiter_registered_ = true;
 
         // Create the dispatch source
         src_ = dispatch_source_create( DISPATCH_SOURCE_TYPE_READ, uintptr_t( mtx_.native_handle() ), 0, queue_ );
@@ -374,8 +387,8 @@ private:
 // Public API
 // ---------------------------------------------------------------------------
 
-/// @brief Asynchronously acquires @p mtx and invokes @p handler with an
-///        `expected<unique_lock, error_code>` result.
+/// @brief Asynchronously acquires @p mtx on @p queue and invokes @p handler
+///        with an `expected<unique_lock, error_code>` result.
 ///
 /// The handler is called exactly once, on @p queue, with the signature:
 ///
@@ -383,52 +396,20 @@ private:
 ///   void handler(expected<std::unique_lock<Mutex>, std::error_code> result);
 /// @endcode
 ///
-/// where `expected` is `std::expected` (C++23) or `tl::expected` (C++20+).
-///
 /// - **Success** (`result.has_value()`): Lock is owned; `result->owns_lock() == true`.
-///   Call `result->unlock()` (or let it destruct) to release.
-/// - **Cancellation / error** (`!result.has_value()`): Lock is not owned;
-///   `result.error()` contains the error code.
-///
-/// If the mutex is immediately available (`try_lock()` succeeds), @p handler
-/// is posted to @p queue via `dispatch_async` before this function returns.
+/// - **Cancellation / error** (`!result.has_value()`): `result.error()` holds the error.
 ///
 /// Lifetime
 /// --------
-/// - @p mtx must remain live until @p handler fires.  Destroying the mutex
-///   while a wait is pending is **undefined behaviour**.
-/// - @p queue must remain live until @p handler fires.  Retain it (via
-///   `dispatch_retain`) if its lifetime is not guaranteed externally.
-/// - All internal resources are managed automatically; no handle is returned.
+/// - @p mtx must remain live until @p handler fires.
+/// - @p queue must remain live until @p handler fires.
 ///
-/// Cancellation
-/// ------------
-/// This overload provides no cancellation.  Use `async_acquire_cancellable`
-/// if you need to abort a pending wait.
-///
-/// Example
-/// -------
-/// @code
-///   nova::sync::native_async_mutex mtx;
-///   dispatch_queue_t queue = dispatch_queue_create("com.example.q",
-///                                                  DISPATCH_QUEUE_SERIAL);
-///
-///   nova::sync::async_acquire(mtx, queue,
-///       [](auto result) {
-///           if (result) {
-///               auto& lock = *result;
-///               // lock.owns_lock() == true — critical section here
-///           }
-///       });
-/// @endcode
-///
-/// @param mtx     A mutex satisfying `native_async_mutex` with
-///                `int native_handle()` (e.g. `kqueue_mutex`).
+/// @param mtx     A mutex satisfying `native_async_mutex` with `native_handle()`.
 /// @param queue   Dispatch queue for event delivery and @p handler.
 /// @param handler Callable invoked with `expected<std::unique_lock<Mutex>, std::error_code>`.
 template < typename Mutex, typename Handler >
 void async_acquire( Mutex& mtx, dispatch_queue_t queue, Handler&& handler )
-    requires detail::invocable_with_expected< Handler, Mutex >
+    requires detail::invocable_with_expected< Handler, Mutex > && concepts::native_async_mutex< Mutex >
 {
     using state_type = detail::dispatch_acquire_state< Mutex, std::decay_t< Handler > >;
     auto state       = std::make_shared< state_type >( mtx, queue, std::forward< Handler >( handler ) );
@@ -436,24 +417,14 @@ void async_acquire( Mutex& mtx, dispatch_queue_t queue, Handler&& handler )
 }
 
 /// @brief Asynchronously acquires @p mtx on @p queue and returns a
-///        `dispatch_acquire_handle` that can cancel the pending wait.
+///        cancellable handle.
 ///
 /// Identical to the non-cancellable `async_acquire` overload except:
 ///
 /// - Returns a `dispatch_acquire_handle` exposing a `cancel()` method.
 /// - Calling `handle.cancel()` aborts the wait; @p handler is called with
 ///   `errc::operation_canceled`.
-/// - Destroying the handle automatically cancels any pending wait; the handler
-///   is invoked with the error.
-/// - If `cancel()` races with a successful acquisition:
-///   - If the lock was taken before the flag was seen: the lock is released
-///     and the handler receives an error.
-///   - If the lock was not yet taken: the handler receives an error directly.
-///
-/// Lifetime
-/// --------
-/// Same as the non-cancellable `async_acquire` overload.  Additionally,
-/// @p handler must remain callable until it fires (success or cancellation).
+/// - Destroying the handle automatically cancels any pending wait.
 ///
 /// Example
 /// -------
@@ -466,18 +437,11 @@ void async_acquire( Mutex& mtx, dispatch_queue_t queue, Handler&& handler )
 ///               // cancelled
 ///           }
 ///       });
-///
-///   // From any thread or queue:
 ///   handle.cancel();
 /// @endcode
-///
-/// @param mtx     A mutex satisfying `native_async_mutex` with
-///                `int native_handle()` (e.g. `kqueue_mutex`).
-/// @param queue   Dispatch queue for event delivery and @p handler.
-/// @param handler Callable invoked with `expected<std::unique_lock<Mutex>, std::error_code>`.
 template < typename Mutex, typename Handler >
 dispatch_acquire_handle async_acquire_cancellable( Mutex& mtx, dispatch_queue_t queue, Handler&& handler )
-    requires detail::invocable_with_expected< Handler, Mutex >
+    requires detail::invocable_with_expected< Handler, Mutex > && concepts::native_async_mutex< Mutex >
 {
     using state_type = detail::dispatch_acquire_cancellable_state< Mutex, std::decay_t< Handler > >;
     auto op          = std::make_shared< state_type >( mtx, queue, std::forward< Handler >( handler ) );
@@ -488,50 +452,13 @@ dispatch_acquire_handle async_acquire_cancellable( Mutex& mtx, dispatch_queue_t 
     };
 }
 
-/// @brief Asynchronously acquires @p mtx on @p queue and returns a
-///        `dispatch_acquire_future_state` containing a future.
+/// @brief Asynchronously acquires @p mtx on @p queue and returns a future.
 ///
-/// If the mutex is immediately available (`try_lock()` succeeds), the
-/// returned future is already ready and holds a locked `unique_lock`.
-/// Otherwise the acquisition is performed asynchronously on @p queue; once
-/// the mutex is taken the promise is fulfilled with a `unique_lock` that owns it.
+/// If the mutex is immediately available (`try_lock()` succeeds), the returned
+/// future is already ready with a locked `unique_lock`. Otherwise the acquisition
+/// is performed asynchronously; once the mutex is acquired the future becomes ready.
 ///
-/// Handler / future value
-/// ----------------------
-/// The future carries `std::unique_lock<Mutex>` with `owns_lock() == true`.
-/// The caller is responsible for unlocking — either explicitly via
-/// `lock.unlock()` or by letting the `unique_lock` destruct.
-///
-/// Lifetime
-/// --------
-/// - @p mtx must remain live until the operation completes.
-///   Destroying the mutex while a wait is pending is **undefined behaviour**.
-/// - @p queue must remain live until the operation completes.
-///
-/// Cancellation
-/// -----------
-/// This overload provides no cancellation. Use `async_acquire_cancellable`
-/// if you need to abort a pending wait.
-///
-/// Example
-/// -------
-/// @code
-///   nova::sync::native_async_mutex mtx;
-///   dispatch_queue_t queue = dispatch_queue_create("com.example.q",
-///                                                  DISPATCH_QUEUE_SERIAL);
-///
-///   mtx.lock(); // hold the lock from main thread
-///
-///   auto [fut] = nova::sync::async_acquire(mtx, queue);
-///
-///   mtx.unlock(); // release: the async waiter will now acquire
-///
-///   auto lock = fut.get(); // blocks until acquired; lock.owns_lock() == true
-///   // ... critical section ...
-///   // lock released automatically on scope exit
-/// @endcode
-///
-/// @param mtx   A mutex with `native_handle()` and `try_lock()`.
+/// @param mtx   A mutex satisfying `native_async_mutex` with `native_handle()`.
 /// @param queue Dispatch queue for event delivery.
 template < typename Mutex >
 struct dispatch_acquire_future_state
@@ -541,6 +468,7 @@ struct dispatch_acquire_future_state
 
 template < typename Mutex >
 dispatch_acquire_future_state< Mutex > async_acquire( Mutex& mtx, dispatch_queue_t queue )
+    requires concepts::native_async_mutex< Mutex >
 {
     using promise_t = std::promise< std::unique_lock< Mutex > >;
 
@@ -552,20 +480,28 @@ dispatch_acquire_future_state< Mutex > async_acquire( Mutex& mtx, dispatch_queue
         };
     }
 
-    auto promise    = std::make_shared< promise_t >();
-    auto future     = promise->get_future();
-    auto retry_func = std::make_shared< std::function< void() > >();
+    // Register as a waiter so unlock() will trigger the kevent (fast-path types only)
+    detail::register_async_waiter( mtx );
 
-    *retry_func = [ &mtx, promise, retry_func, queue ]() {
+    auto promise           = std::make_shared< promise_t >();
+    auto future            = promise->get_future();
+    auto retry_func        = std::make_shared< std::function< void() > >();
+    auto waiter_registered = std::make_shared< bool >( true );
+
+    *retry_func = [ &mtx, promise, retry_func, queue, waiter_registered ]() {
         // Create a new dispatch source for this wait attempt
         dispatch_source_t src = dispatch_source_create( DISPATCH_SOURCE_TYPE_READ,
                                                         static_cast< uintptr_t >( mtx.native_handle() ),
                                                         0,
                                                         queue );
 
-        dispatch_source_set_event_handler( src, [ &mtx, promise, retry_func, src, queue ] {
+        dispatch_source_set_event_handler( src, [ &mtx, promise, retry_func, src, queue, waiter_registered ] {
             if ( mtx.try_lock() ) {
                 // Successfully acquired — set promise and clean up
+                if ( *waiter_registered ) {
+                    detail::unregister_async_waiter( mtx );
+                    *waiter_registered = false;
+                }
                 dispatch_source_cancel( src );
                 dispatch_async( dispatch_get_global_queue( QOS_CLASS_DEFAULT, 0 ), [ promise, &mtx ] {
                     promise->set_value( std::unique_lock< Mutex >( mtx, std::adopt_lock ) );
@@ -579,8 +515,12 @@ dispatch_acquire_future_state< Mutex > async_acquire( Mutex& mtx, dispatch_queue
             }
         } );
 
-        dispatch_source_set_cancel_handler( src, [ src ] {
+        dispatch_source_set_cancel_handler( src, [ src, &mtx, waiter_registered ] {
             detail::release_dispatch_object( src );
+            if ( *waiter_registered ) {
+                detail::unregister_async_waiter( mtx );
+                *waiter_registered = false;
+            }
         } );
 
         dispatch_resume( src );

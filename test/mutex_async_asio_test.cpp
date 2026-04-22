@@ -3,8 +3,9 @@
 
 #include <catch2/catch_all.hpp>
 
-#include <nova/sync/mutex/async_concepts.hpp>
-#include <nova/sync/mutex/native_async_mutex.hpp>
+#include <nova/sync/mutex/boost_asio_support.hpp>
+
+#include "mutex_types.hpp"
 
 #include <boost/asio.hpp>
 
@@ -15,7 +16,6 @@
 #include <thread>
 
 using namespace std::chrono_literals;
-using Mtx = nova::sync::native_async_mutex;
 
 // ---------------------------------------------------------------------------
 // Helper: run an io_context on a background thread.
@@ -53,8 +53,9 @@ struct asio_runner
 // Boost.Asio tests
 // ---------------------------------------------------------------------------
 
-TEST_CASE( "native_async_mutex: explicit expected types", "[native_async_mutex][boost_asio]" )
+TEMPLATE_TEST_CASE( "async_mutex: explicit expected types", "[async_mutex][boost_asio]", NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
+    using Mtx = TestType;
     Mtx         mtx;
     asio_runner runner;
 
@@ -81,8 +82,11 @@ TEST_CASE( "native_async_mutex: explicit expected types", "[native_async_mutex][
 #endif
 }
 
-TEST_CASE( "native_async_mutex: async acquire fires after unlock", "[native_async_mutex][boost_asio]" )
+TEMPLATE_TEST_CASE( "async_mutex: async acquire fires after unlock",
+                    "[async_mutex][boost_asio]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
+    using Mtx = TestType;
     Mtx         mtx;
     asio_runner runner;
 
@@ -123,8 +127,9 @@ TEST_CASE( "native_async_mutex: async acquire fires after unlock", "[native_asyn
 }
 
 
-TEST_CASE( "native_async_mutex: no early wakeup while locked", "[native_async_mutex][boost_asio]" )
+TEMPLATE_TEST_CASE( "async_mutex: no early wakeup while locked", "[async_mutex][boost_asio]", NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
+    using Mtx = TestType;
     Mtx         mtx;
     asio_runner runner;
 
@@ -155,8 +160,11 @@ TEST_CASE( "native_async_mutex: no early wakeup while locked", "[native_async_mu
     mtx.unlock();
 }
 
-TEST_CASE( "native_async_mutex: mutual exclusion with async acquires", "[native_async_mutex][boost_asio]" )
+TEMPLATE_TEST_CASE( "async_mutex: mutual exclusion with async acquires",
+                    "[async_mutex][boost_asio]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
+    using Mtx = TestType;
     Mtx         mtx;
     asio_runner runner;
 
@@ -191,15 +199,9 @@ TEST_CASE( "native_async_mutex: mutual exclusion with async acquires", "[native_
     REQUIRE( *max_concurrent == 1 );
 }
 
-TEST_CASE( "native_async_mutex: concepts", "[native_async_mutex][boost_asio]" )
+TEMPLATE_TEST_CASE( "async_mutex: async acquire future", "[async_mutex][boost_asio]", NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
-    // The concept checks that handlers accepting expected<unique_lock, error_code>
-    // are properly recognized. This is tested at runtime in the other test cases.
-    // The concept is implicitly checked when calling async_acquire with such handlers.
-}
-
-TEST_CASE( "native_async_mutex: async acquire future", "[native_async_mutex][boost_asio]" )
-{
+    using Mtx = TestType;
     Mtx         mtx;
     asio_runner runner;
 
@@ -215,8 +217,11 @@ TEST_CASE( "native_async_mutex: async acquire future", "[native_async_mutex][boo
     runner.stop();
 }
 
-TEST_CASE( "async_acquire_cancellable — cancel prevents handler", "[native_async_mutex][boost_asio]" )
+TEMPLATE_TEST_CASE( "async_acquire_cancellable — cancel prevents handler",
+                    "[async_mutex][boost_asio]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
+    using Mtx = TestType;
     Mtx         mtx;
     asio_runner runner;
 
@@ -246,8 +251,11 @@ TEST_CASE( "async_acquire_cancellable — cancel prevents handler", "[native_asy
     REQUIRE( handler_invoked->load() );
 }
 
-TEST_CASE( "async_acquire_cancellable — destructor auto-cancels", "[native_async_mutex][boost_asio]" )
+TEMPLATE_TEST_CASE( "async_acquire_cancellable — destructor auto-cancels",
+                    "[async_mutex][boost_asio]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
+    using Mtx = TestType;
     Mtx         mtx;
     asio_runner runner;
 

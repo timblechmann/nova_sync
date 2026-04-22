@@ -42,7 +42,6 @@ set(headers
     include/nova/sync/detail/compat.hpp
     include/nova/sync/detail/syscall.hpp
     include/nova/sync/mutex/apple_os_unfair_mutex.hpp
-    include/nova/sync/mutex/async_concepts.hpp
     include/nova/sync/mutex/boost_asio_support.hpp
     include/nova/sync/mutex/concepts.hpp
     include/nova/sync/mutex/eventfd_mutex.hpp
@@ -133,9 +132,9 @@ if(NOVA_SYNC_TESTS)
 
     add_executable(nova_sync_tests
         include/nova/sync/mutex/boost_asio_support.hpp # to make clangd happy
-        include/nova/sync/mutex/async_concepts.hpp
         include/nova/sync/mutex/libdispatch_support.hpp
         include/nova/sync/mutex/qt_support.hpp
+        include/nova/sync/detail/async_support.hpp
 
         test/mutex_types.hpp
         test/mutex_test.cpp

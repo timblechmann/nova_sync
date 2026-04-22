@@ -5,8 +5,8 @@
 
 #    include <catch2/catch_all.hpp>
 
-#    include <nova/sync/mutex/async_concepts.hpp>
-#    include <nova/sync/mutex/native_async_mutex.hpp>
+#    include "mutex_types.hpp"
+
 #    include <nova/sync/mutex/qt_support.hpp>
 
 #    include <atomic>
@@ -19,7 +19,6 @@
 #    include <QtCore/QCoreApplication>
 
 using namespace std::chrono_literals;
-using Mtx = nova::sync::native_async_mutex;
 
 // ---------------------------------------------------------------------------
 // Catch2 listener: create a QCoreApplication before any test runs, once.
@@ -67,8 +66,11 @@ static void process_events_until( std::chrono::steady_clock::time_point deadline
 // Qt tests
 // ---------------------------------------------------------------------------
 
-TEST_CASE( "native_async_mutex (Qt): explicit expected types", "[native_async_mutex][qt]" )
+TEMPLATE_TEST_CASE( "native_async_mutex (Qt): explicit expected types",
+                    "[native_async_mutex][qt]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
+    using Mtx = TestType;
     Mtx mtx;
 
     auto handler_fired = std::make_shared< std::atomic< bool > >( false );
@@ -111,8 +113,11 @@ TEST_CASE( "native_async_mutex (Qt): explicit expected types", "[native_async_mu
 #    endif
 }
 
-TEST_CASE( "native_async_mutex (Qt): async acquire fires after unlock", "[native_async_mutex][qt]" )
+TEMPLATE_TEST_CASE( "native_async_mutex (Qt): async acquire fires after unlock",
+                    "[native_async_mutex][qt]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
+    using Mtx = TestType;
     Mtx mtx;
 
     auto acquired_after_release = std::make_shared< std::atomic< bool > >( false );
@@ -152,8 +157,11 @@ TEST_CASE( "native_async_mutex (Qt): async acquire fires after unlock", "[native
     mtx.unlock();
 }
 
-TEST_CASE( "native_async_mutex (Qt): no early wakeup while locked", "[native_async_mutex][qt]" )
+TEMPLATE_TEST_CASE( "native_async_mutex (Qt): no early wakeup while locked",
+                    "[native_async_mutex][qt]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
+    using Mtx = TestType;
     Mtx mtx;
 
     auto handler_fired = std::make_shared< std::atomic< bool > >( false );
@@ -183,8 +191,11 @@ TEST_CASE( "native_async_mutex (Qt): no early wakeup while locked", "[native_asy
     mtx.unlock();
 }
 
-TEST_CASE( "native_async_mutex (Qt): mutual exclusion with async acquires", "[native_async_mutex][qt]" )
+TEMPLATE_TEST_CASE( "native_async_mutex (Qt): mutual exclusion with async acquires",
+                    "[native_async_mutex][qt]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
+    using Mtx = TestType;
     Mtx mtx;
 
     const int tasks          = 8;
@@ -217,8 +228,11 @@ TEST_CASE( "native_async_mutex (Qt): mutual exclusion with async acquires", "[na
     REQUIRE( *max_concurrent == 1 );
 }
 
-TEST_CASE( "qt_async_acquire_cancellable — cancel delivers error to handler", "[native_async_mutex][qt]" )
+TEMPLATE_TEST_CASE( "qt_async_acquire_cancellable — cancel delivers error to handler",
+                    "[native_async_mutex][qt]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
+    using Mtx = TestType;
     Mtx mtx;
 
     auto handler_invoked = std::make_shared< std::atomic< bool > >( false );
@@ -244,8 +258,11 @@ TEST_CASE( "qt_async_acquire_cancellable — cancel delivers error to handler", 
     REQUIRE( handler_invoked->load() );
 }
 
-TEST_CASE( "qt_async_acquire_cancellable — destructor auto-cancels", "[native_async_mutex][qt]" )
+TEMPLATE_TEST_CASE( "qt_async_acquire_cancellable — destructor auto-cancels",
+                    "[native_async_mutex][qt]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
+    using Mtx = TestType;
     Mtx mtx;
 
     auto handler_invoked = std::make_shared< std::atomic< bool > >( false );
@@ -272,8 +289,9 @@ TEST_CASE( "qt_async_acquire_cancellable — destructor auto-cancels", "[native_
     REQUIRE( handler_invoked->load() );
 }
 
-TEST_CASE( "qt_async_acquire — futures", "[native_async_mutex][qt]" )
+TEMPLATE_TEST_CASE( "qt_async_acquire — futures", "[native_async_mutex][qt]", NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
+    using Mtx = TestType;
     Mtx mtx;
 
     SECTION( "std::future: ready immediately if mutex available" )

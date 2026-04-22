@@ -20,28 +20,34 @@ namespace concepts {
 
 } // namespace concepts
 
-// ---------------------------------------------------------------------------
-// Cross-platform type alias
-// ---------------------------------------------------------------------------
-
 #if defined( _WIN32 )
 
-using native_async_mutex = win32_mutex;
+using native_fast_async_mutex = win32_mutex;
+using native_async_mutex      = win32_mutex;
 
 #elif defined( __APPLE__ )
 
-using native_async_mutex = kqueue_mutex;
+using native_fast_async_mutex = fast_kqueue_mutex;
+using native_async_mutex      = kqueue_mutex;
 
 #elif defined( __linux__ )
 
-using native_async_mutex = eventfd_mutex;
+using native_fast_async_mutex = fast_eventfd_mutex;
+using native_async_mutex      = eventfd_mutex;
 
 #endif
 
-// Validate the concept at compile time for the current platform's alias.
+// Validate the concepts at compile time for the current platform's aliases.
 #if defined( _WIN32 ) || defined( __APPLE__ ) || defined( __linux__ )
+static_assert( nova::sync::concepts::native_async_mutex< native_fast_async_mutex >,
+               "native_async_mutex does not satisfy the native_async_mutex concept" );
 static_assert( nova::sync::concepts::native_async_mutex< native_async_mutex >,
                "native_async_mutex does not satisfy the native_async_mutex concept" );
+#endif
+
+#if defined( __APPLE__ ) || defined( __linux__ )
+static_assert( nova::sync::concepts::async_waiter_mutex< native_fast_async_mutex >,
+               "native_async_mutex does not satisfy the async_waiter_mutex concept" );
 #endif
 
 } // namespace nova::sync
