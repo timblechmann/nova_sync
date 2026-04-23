@@ -327,4 +327,111 @@ TEMPLATE_TEST_CASE( "qt_async_acquire — futures", "[native_async_mutex][qt]", 
     }
 }
 
+// ---------------------------------------------------------------------------
+// Stress / edge-case tests
+// ---------------------------------------------------------------------------
+
+TEMPLATE_TEST_CASE( "native_async_mutex (Qt) stress: high contention many async waiters",
+                    "[native_async_mutex][qt][stress]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
+{
+    using Mtx = TestType;
+    Mtx mtx;
+
+    const int tasks          = 32;
+    auto      inside         = std::make_shared< std::atomic< int > >( 0 );
+    auto      max_concurrent = std::make_shared< std::atomic< int > >( 0 );
+    auto      completions    = std::make_shared< std::atomic< int > >( 0 );
+
+    for ( int i = 0; i < tasks; ++i )
+        QMetaObject::invokeMethod( QCoreApplication::instance(), [ &mtx, inside, max_concurrent, completions ] {
+            nova::sync::qt_async_acquire( mtx,
+                                          QCoreApplication::instance(),
+                                          [ inside, max_concurrent, completions ]( auto result ) {
+                REQUIRE( result );
+                REQUIRE( result->owns_lock() );
+                int current  = ++( *inside );
+                int expected = max_concurrent->load();
+                while ( current > expected && !max_concurrent->compare_exchange_weak( expected, current ) )
+                    ;
+                --( *inside );
+                ++( *completions );
+            } );
+        }, Qt::QueuedConnection );
+
+    process_events_until( std::chrono::steady_clock::now() + 10s, [ & ] {
+        return completions->load() >= tasks;
+    } );
+
+    REQUIRE( completions->load() == tasks );
+    REQUIRE( *inside == 0 );
+    REQUIRE( *max_concurrent == 1 );
+
+    REQUIRE( mtx.try_lock() );
+    mtx.unlock();
+}
+
+TEMPLATE_TEST_CASE( "native_async_mutex (Qt) stress: unlock races CAS acquisition",
+                    "[native_async_mutex][qt][stress]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
+{
+    using Mtx = TestType;
+    Mtx mtx;
+
+    const int rounds      = 50;
+    auto      completions = std::make_shared< std::atomic< int > >( 0 );
+
+    for ( int i = 0; i < rounds; ++i ) {
+        mtx.lock();
+
+        nova::sync::qt_async_acquire( mtx, QCoreApplication::instance(), [ completions ]( auto result ) {
+            REQUIRE( result );
+            REQUIRE( result->owns_lock() );
+            ++( *completions );
+        } );
+
+        // Unlock immediately — races with async wakeup
+        mtx.unlock();
+    }
+
+    process_events_until( std::chrono::steady_clock::now() + 5s, [ & ] {
+        return completions->load() >= rounds;
+    } );
+
+    REQUIRE( completions->load() == rounds );
+    REQUIRE( mtx.try_lock() );
+    mtx.unlock();
+}
+
+TEMPLATE_TEST_CASE( "native_async_mutex (Qt) stress: no stray notifications after acquire cycles",
+                    "[native_async_mutex][qt][stress]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
+{
+    using Mtx = TestType;
+    Mtx mtx;
+
+    const int rounds      = 20;
+    auto      completions = std::make_shared< std::atomic< int > >( 0 );
+
+    for ( int i = 0; i < rounds; ++i ) {
+        auto future = nova::sync::qt_async_acquire( mtx, QCoreApplication::instance() );
+
+        auto deadline = std::chrono::steady_clock::now() + 2s;
+        while ( future.wait_for( 5ms ) == std::future_status::timeout && std::chrono::steady_clock::now() < deadline )
+            QCoreApplication::processEvents( QEventLoop::AllEvents, 1 );
+
+        if ( future.wait_for( 0ms ) == std::future_status::ready ) {
+            auto lock = future.get();
+            REQUIRE( lock.owns_lock() );
+            ++( *completions );
+        }
+    }
+
+    REQUIRE( completions->load() == rounds );
+
+    // No stray notifications — mutex must be immediately acquirable
+    REQUIRE( mtx.try_lock() );
+    mtx.unlock();
+}
+
 #endif // NOVA_SYNC_HAS_QT

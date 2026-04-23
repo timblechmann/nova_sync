@@ -37,24 +37,26 @@ function(nova_sync_install_pmr)
 endfunction()
 
 set(headers
-    include/nova/sync/detail/async_support.hpp
     include/nova/sync/detail/backoff.hpp
     include/nova/sync/detail/compat.hpp
     include/nova/sync/detail/syscall.hpp
+    include/nova/sync/detail/timed_wait.hpp
     include/nova/sync/mutex/apple_os_unfair_mutex.hpp
-    include/nova/sync/mutex/support/boost_asio_support.hpp
     include/nova/sync/mutex/concepts.hpp
+    include/nova/sync/mutex/detail/async_support.hpp
     include/nova/sync/mutex/eventfd_mutex.hpp
     include/nova/sync/mutex/fair_mutex.hpp
     include/nova/sync/mutex/fast_mutex.hpp
     include/nova/sync/mutex/kqueue_mutex.hpp
     include/nova/sync/mutex/native_async_mutex.hpp
-    include/nova/sync/mutex/support/libdispatch_support.hpp
     include/nova/sync/mutex/pthread_rt_mutex.hpp
     include/nova/sync/mutex/pthread_spinlock_mutex.hpp
     include/nova/sync/mutex/recursive_spinlock_mutex.hpp
     include/nova/sync/mutex/shared_spinlock_mutex.hpp
     include/nova/sync/mutex/spinlock_mutex.hpp
+    include/nova/sync/mutex/support/async_waiter_guard.hpp
+    include/nova/sync/mutex/support/boost_asio_support.hpp
+    include/nova/sync/mutex/support/libdispatch_support.hpp
     include/nova/sync/mutex/support/qt_support.hpp
     include/nova/sync/mutex/win32_critical_section_mutex.hpp
     include/nova/sync/mutex/win32_event_mutex.hpp
@@ -64,6 +66,7 @@ set(headers
 
 set(sources
     source/nova/sync/detail/syscall.cpp
+    source/nova/sync/detail/timed_wait.cpp
     source/nova/sync/mutex/eventfd_mutex.cpp
     source/nova/sync/mutex/fair_mutex.cpp
     source/nova/sync/mutex/fast_mutex.cpp
@@ -136,7 +139,7 @@ if(NOVA_SYNC_TESTS)
         include/nova/sync/mutex/support/boost_asio_support.hpp # to make clangd happy
         include/nova/sync/mutex/support/libdispatch_support.hpp
         include/nova/sync/mutex/support/qt_support.hpp
-        include/nova/sync/detail/async_support.hpp
+        include/nova/sync/mutex/detail/async_support.hpp
 
         test/mutex_types.hpp
         test/mutex_test.cpp

@@ -284,3 +284,192 @@ TEMPLATE_TEST_CASE( "async_acquire_cancellable — destructor auto-cancels",
 
     REQUIRE( handler_invoked->load() );
 }
+
+// ---------------------------------------------------------------------------
+// Stress / edge-case tests
+// ---------------------------------------------------------------------------
+
+TEMPLATE_TEST_CASE( "async_mutex stress: high contention many async waiters",
+                    "[async_mutex][boost_asio][stress]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
+{
+    using Mtx = TestType;
+
+    // Use a larger thread pool to increase contention
+    boost::asio::io_context                                                    ioc;
+    boost::asio::executor_work_guard< boost::asio::io_context::executor_type > work_guard {
+        boost::asio::make_work_guard( ioc ) };
+
+    const int                  thread_count = 4;
+    std::vector< std::thread > threads;
+    threads.reserve( thread_count );
+    for ( int i = 0; i < thread_count; ++i )
+        threads.emplace_back( [ &ioc ] {
+            ioc.run();
+        } );
+
+    Mtx       mtx;
+    const int tasks          = 32;
+    auto      inside         = std::make_shared< std::atomic< int > >( 0 );
+    auto      max_concurrent = std::make_shared< std::atomic< int > >( 0 );
+    auto      completions    = std::make_shared< std::atomic< int > >( 0 );
+
+    for ( int i = 0; i < tasks; ++i )
+        boost::asio::post( ioc, [ &mtx, &ioc, inside, max_concurrent, completions ] {
+            nova::sync::async_acquire( ioc, mtx, [ inside, max_concurrent, completions ]( auto result ) {
+                REQUIRE( result );
+                REQUIRE( result->owns_lock() );
+                int current  = ++( *inside );
+                int expected = max_concurrent->load();
+                while ( current > expected && !max_concurrent->compare_exchange_weak( expected, current ) )
+                    ;
+                // Small pause to increase chance of detecting concurrent acquisition
+                std::this_thread::sleep_for( std::chrono::microseconds( 100 ) );
+                --( *inside );
+                ++( *completions );
+            } );
+        } );
+
+    auto deadline = std::chrono::steady_clock::now() + 10s;
+    while ( completions->load() < tasks && std::chrono::steady_clock::now() < deadline )
+        std::this_thread::sleep_for( 5ms );
+
+    work_guard.reset();
+    for ( auto& t : threads )
+        if ( t.joinable() )
+            t.join();
+
+    REQUIRE( completions->load() == tasks );
+    REQUIRE( *inside == 0 );
+    REQUIRE( *max_concurrent == 1 );
+
+    // Mutex must be acquirable after all async ops complete (no stray notifications)
+    REQUIRE( mtx.try_lock() );
+    mtx.unlock();
+}
+
+TEMPLATE_TEST_CASE( "async_mutex stress: unlock races CAS acquisition",
+                    "[async_mutex][boost_asio][stress]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
+{
+    // Repeatedly lock from one thread, start async waiter, then immediately
+    // unlock — exercising the race between unlock() and the async wakeup path.
+    using Mtx = TestType;
+
+    asio_runner runner;
+    Mtx         mtx;
+
+    const int rounds      = 50;
+    auto      completions = std::make_shared< std::atomic< int > >( 0 );
+
+    for ( int i = 0; i < rounds; ++i ) {
+        mtx.lock();
+
+        nova::sync::async_acquire( runner.ioc, mtx, [ completions ]( auto result ) {
+            REQUIRE( result );
+            REQUIRE( result->owns_lock() );
+            ++( *completions );
+        } );
+
+        // Unlock immediately — races with the async wakeup
+        mtx.unlock();
+    }
+
+    auto deadline = std::chrono::steady_clock::now() + 5s;
+    while ( completions->load() < rounds && std::chrono::steady_clock::now() < deadline )
+        std::this_thread::sleep_for( 5ms );
+
+    runner.stop();
+
+    REQUIRE( completions->load() == rounds );
+
+    // Mutex must be cleanly acquirable with no stray notifications
+    REQUIRE( mtx.try_lock() );
+    mtx.unlock();
+}
+
+TEMPLATE_TEST_CASE( "async_mutex stress: cancellation under load",
+                    "[async_mutex][boost_asio][stress]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
+{
+    // Start many async acquires; cancel some immediately after registering.
+    // The non-cancelled ones should eventually succeed after the lock is released.
+    using Mtx = TestType;
+
+    asio_runner runner;
+    Mtx         mtx;
+    mtx.lock(); // hold the lock so all waiters block
+
+    const int total     = 16;
+    const int to_cancel = total / 2;
+    auto      successes = std::make_shared< std::atomic< int > >( 0 );
+    auto      cancels   = std::make_shared< std::atomic< int > >( 0 );
+
+    // Post the non-cancellable ones
+    for ( int i = 0; i < ( total - to_cancel ); ++i ) {
+        nova::sync::async_acquire( runner.ioc, mtx, [ successes ]( auto result ) {
+            if ( result )
+                ++( *successes );
+        } );
+    }
+
+    // Post cancellable ones and cancel them immediately
+    for ( int i = 0; i < to_cancel; ++i ) {
+        auto handle = nova::sync::async_acquire_cancellable( runner.ioc, mtx, [ cancels ]( auto result ) {
+            if ( !result )
+                ++( *cancels );
+        } );
+        handle.cancel(); // cancel right away; handle destructs here
+    }
+
+    // Now release the lock so the remaining waiters can proceed
+    mtx.unlock();
+
+    auto deadline = std::chrono::steady_clock::now() + 5s;
+    while ( ( successes->load() + cancels->load() ) < total && std::chrono::steady_clock::now() < deadline )
+        std::this_thread::sleep_for( 5ms );
+
+    runner.stop();
+
+    REQUIRE( successes->load() + cancels->load() == total );
+    REQUIRE( successes->load() >= 1 );
+}
+
+TEMPLATE_TEST_CASE( "async_mutex stress: no stray notifications after acquire cycles",
+                    "[async_mutex][boost_asio][stress]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
+{
+    // After repeated lock/unlock/async-acquire cycles the mutex should have
+    // no pending notifications and be immediately acquirable with try_lock().
+    using Mtx = TestType;
+
+    asio_runner runner;
+    Mtx         mtx;
+
+    const int rounds      = 20;
+    auto      completions = std::make_shared< std::atomic< int > >( 0 );
+
+    for ( int i = 0; i < rounds; ++i ) {
+        auto promise = std::make_shared< std::promise< void > >();
+        auto fut     = promise->get_future();
+
+        mtx.lock();
+        nova::sync::async_acquire( runner.ioc, mtx, [ completions, promise ]( auto result ) {
+            REQUIRE( result );
+            ++( *completions );
+            promise->set_value();
+        } );
+        mtx.unlock();
+
+        // Wait for this round to complete before starting the next
+        fut.wait_for( 2s );
+    }
+
+    runner.stop();
+
+    REQUIRE( completions->load() == rounds );
+
+    // Final check: no stray notifications — try_lock must succeed
+    REQUIRE( mtx.try_lock() );
+    mtx.unlock();
+}

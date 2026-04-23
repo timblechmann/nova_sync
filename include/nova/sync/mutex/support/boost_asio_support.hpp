@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <nova/sync/detail/async_support.hpp>
 #include <nova/sync/mutex/concepts.hpp>
+#include <nova/sync/mutex/detail/async_support.hpp>
 
 #if __has_include( <boost/asio.hpp>) && defined( NOVA_SYNC_HAS_EXPECTED )
 
@@ -16,8 +16,8 @@
 #    include <boost/asio/dispatch.hpp>
 #    include <boost/asio/io_context.hpp>
 
-#    include <nova/sync/detail/async_support.hpp>
 #    include <nova/sync/detail/syscall.hpp>
+#    include <nova/sync/mutex/detail/async_support.hpp>
 
 #    if defined( __linux__ ) || defined( __APPLE__ )
 #        include <boost/asio/posix/stream_descriptor.hpp>
@@ -35,23 +35,6 @@ using native_stream_descriptor = boost::asio::posix::stream_descriptor;
 #    elif defined( _WIN32 )
 using native_stream_descriptor = boost::asio::windows::object_handle;
 #    endif
-
-// ---------------------------------------------------------------------------
-// Platform-specific post-wait acquisition logic.
-//
-// POSIX (Linux eventfd, Apple kqueue):
-//   The fd becoming readable only signals that unlock() was called.  Another
-//   thread may race and grab the lock first.  We call try_lock() and retry
-//   the wait if it fails (spurious-wakeup-safe retry loop).
-//
-// Windows (mutex HANDLE via windows::object_handle):
-//   RegisterWaitForSingleObject on a Win32 mutex HANDLE is an atomic
-//   wait-and-acquire.  When the completion fires successfully the calling
-//   thread already owns the mutex — calling try_lock() again would be a
-//   double-acquire (deadlock for non-recursive mutexes).  We therefore skip
-//   try_lock() and report success directly.  WAIT_ABANDONED surfaces as a
-//   non-zero error_code and is forwarded to the handler as an error.
-// ---------------------------------------------------------------------------
 
 #    if defined( __linux__ ) || defined( __APPLE__ )
 template < typename Handler >
@@ -73,19 +56,14 @@ struct async_acquire_op : std::enable_shared_from_this< async_acquire_op< Mutex,
     Mutex&                                      mtx_;
     Handler                                     handler_;
     std::atomic< bool >                         cancellation_requested_ { false };
-    std::atomic< bool >                         waiter_registered_ { true };
+    detail::async_waiter_guard< Mutex >         waiter_guard_;
 
     async_acquire_op( boost::asio::io_context& ioc, auto dup_fd, Mutex& mtx, Handler&& handler ) :
         sd_( std::make_shared< native_stream_descriptor >( ioc, dup_fd ) ),
         mtx_( mtx ),
-        handler_( std::forward< Handler >( handler ) )
+        handler_( std::forward< Handler >( handler ) ),
+        waiter_guard_( mtx )
     {}
-
-    ~async_acquire_op()
-    {
-        if ( waiter_registered_ )
-            do_remove_waiter();
-    }
 
     void cancel()
     {
@@ -99,34 +77,24 @@ struct async_acquire_op : std::enable_shared_from_this< async_acquire_op< Mutex,
             // Check if cancellation was requested before handler execution
             // If so, invoke handler with cancellation error instead
             if ( self->is_cancelled() ) {
-                if ( self->waiter_registered_ ) {
-                    self->do_remove_waiter();
-                    self->waiter_registered_ = false;
-                }
+                self->waiter_guard_.release();
                 return invoke_with_error< Mutex >( self->handler_,
                                                    std::make_error_code( std::errc::operation_canceled ) );
             }
 
             std::error_code ec = std::make_error_code( static_cast< std::errc >( bec.value() ) );
             if ( ec ) {
-                if ( self->waiter_registered_ ) {
-                    self->do_remove_waiter();
-                    self->waiter_registered_ = false;
-                }
+                self->waiter_guard_.release();
                 // Cancelled or descriptor error — forward as operation_canceled.
                 return invoke_with_error< Mutex >( self->handler_,
                                                    std::make_error_code( std::errc::operation_canceled ) );
             }
 
-            if ( detail::platform_try_acquire_after_wait( self->mtx_ ) ) {
-                if ( self->waiter_registered_ ) {
-                    self->do_remove_waiter();
-                    self->waiter_registered_ = false;
-                }
+            if ( self->waiter_guard_.try_acquire() ) {
                 return invoke_with_lock( self->handler_, std::unique_lock( self->mtx_, std::adopt_lock ) );
             }
 
-            self->start_wait(); // POSIX spurious wakeup — retry silently
+            self->start_wait(); // spurious wakeup — retry
         } );
     }
 
@@ -134,11 +102,6 @@ private:
     bool is_cancelled() const noexcept
     {
         return cancellation_requested_.load( std::memory_order_acquire );
-    }
-
-    void do_remove_waiter()
-    {
-        detail::unregister_async_waiter( mtx_ );
     }
 };
 
@@ -229,22 +192,6 @@ struct boost_asio_acquire_handle
 /// cancellation the future will never become ready.  Do not call
 /// `state.future.get()` after cancellation (or catch `std::future_error`).
 ///
-/// Windows-specific semantics
-/// --------------------------
-/// The native handle is a Win32 mutex HANDLE.
-/// `boost::asio::windows::object_handle` waits via `RegisterWaitForSingleObject`,
-/// which is an **atomic wait-and-acquire**: a successful completion means the
-/// calling thread already owns the mutex.  No spurious-wakeup retry is needed.
-/// `WAIT_ABANDONED` (owning thread crashed) is surfaced as an exception in the
-/// future.
-///
-/// POSIX-specific semantics (Linux / macOS)
-/// ----------------------------------------
-/// The native handle is a file descriptor (eventfd on Linux, kqueue fd on
-/// macOS) that becomes readable when `unlock()` is called.  Readability does
-/// not imply exclusive ownership — multiple waiters may race — so each wakeup
-/// is followed by `try_lock()`, with automatic re-registration on failure.
-///
 /// Example
 /// -------
 /// @code
@@ -290,8 +237,6 @@ async_acquire_future_state< Mutex > async_acquire( boost::asio::io_context& ioc,
     }
 
     // Register as a waiter so unlock() will trigger the async event (fast-path types only)
-    detail::register_async_waiter( mtx );
-
     auto dup_fd = detail::duplicate_native_handle( mtx.native_handle() );
     auto sd     = std::make_shared< detail::native_stream_descriptor >( ioc, dup_fd );
 
@@ -299,30 +244,22 @@ async_acquire_future_state< Mutex > async_acquire( boost::asio::io_context& ioc,
     auto promise = promise_t();
     auto future  = promise.get_future();
 
-    auto do_wait           = std::make_shared< std::move_only_function< void() > >();
-    auto waiter_registered = std::make_shared< bool >( true );
-    *do_wait               = [ &, sd, promise = std::move( promise ), do_wait, waiter_registered ]() mutable {
-        detail::async_wait( *sd,
-                            [ &, sd, promise = std::move( promise ), do_wait, waiter_registered ](
-                                const boost::system::error_code& ec ) mutable {
+    auto do_wait = std::make_shared< std::move_only_function< void() > >();
+    auto wg      = std::make_shared< detail::async_waiter_guard< Mutex > >( mtx );
+    *do_wait     = [ &, sd, promise = std::move( promise ), do_wait, wg ]() mutable {
+        detail::async_wait(
+            *sd, [ &, sd, promise = std::move( promise ), do_wait, wg ]( const boost::system::error_code& ec ) mutable {
             if ( ec ) {
-                if ( *waiter_registered ) {
-                    detail::unregister_async_waiter( mtx );
-                    *waiter_registered = false;
-                }
+                wg->release();
                 *do_wait = nullptr; // break the self-referential cycle
                 return;             // cancelled — promise intentionally left unfulfilled
             }
 
-            if ( detail::platform_try_acquire_after_wait( mtx ) ) {
-                if ( *waiter_registered ) {
-                    detail::unregister_async_waiter( mtx );
-                    *waiter_registered = false;
-                }
+            if ( wg->try_acquire() ) {
                 promise.set_value( std::unique_lock< Mutex >( mtx, std::adopt_lock ) );
                 *do_wait = nullptr;      // break the self-referential cycle
             } else {
-                std::invoke( *do_wait ); // POSIX spurious wakeup — retry
+                std::invoke( *do_wait ); // spurious wakeup — retry
             }
         } );
     };
@@ -330,30 +267,22 @@ async_acquire_future_state< Mutex > async_acquire( boost::asio::io_context& ioc,
     auto promise = std::make_shared< promise_t >();
     auto future  = promise->get_future();
 
-    auto do_wait           = std::make_shared< std::function< void() > >();
-    auto waiter_registered = std::make_shared< bool >( true );
-    *do_wait               = [ &, sd, promise = std::move( promise ), do_wait, waiter_registered ]() mutable {
-        detail::async_wait( *sd,
-                            [ &, sd, promise = std::move( promise ), do_wait, waiter_registered ](
-                                const boost::system::error_code& ec ) mutable {
+    auto do_wait = std::make_shared< std::function< void() > >();
+    auto wg      = std::make_shared< detail::async_waiter_guard< Mutex > >( mtx );
+    *do_wait     = [ &, sd, promise = std::move( promise ), do_wait, wg ]() mutable {
+        detail::async_wait(
+            *sd, [ &, sd, promise = std::move( promise ), do_wait, wg ]( const boost::system::error_code& ec ) mutable {
             if ( ec ) {
-                if ( *waiter_registered ) {
-                    detail::unregister_async_waiter( mtx );
-                    *waiter_registered = false;
-                }
+                wg->release();
                 *do_wait = nullptr; // break the self-referential cycle
                 return;             // cancelled — promise intentionally left unfulfilled
             }
 
-            if ( detail::platform_try_acquire_after_wait( mtx ) ) {
-                if ( *waiter_registered ) {
-                    detail::unregister_async_waiter( mtx );
-                    *waiter_registered = false;
-                }
+            if ( wg->try_acquire() ) {
                 promise->set_value( std::unique_lock( mtx, std::adopt_lock ) );
                 *do_wait = nullptr;      // break the self-referential cycle
             } else {
-                std::invoke( *do_wait ); // POSIX spurious wakeup — retry
+                std::invoke( *do_wait ); // spurious wakeup — retry
             }
         } );
     };
@@ -432,8 +361,6 @@ void async_acquire( boost::asio::io_context& ioc, Mutex& mtx, Handler&& handler 
     }
 
     // Register as a waiter so unlock() will trigger the async event (fast-path types only)
-    detail::register_async_waiter( mtx );
-
     auto dup_fd = detail::duplicate_native_handle( mtx.native_handle() );
 
     using async_acquire_op = detail::async_acquire_op< Mutex, Handler >;
@@ -481,9 +408,6 @@ auto async_acquire_cancellable( boost::asio::io_context& ioc, Mutex& mtx, Handle
         } );
         return boost_asio_acquire_handle< Mutex, Handler > {};
     }
-
-    // Register as a waiter so unlock() will trigger the async event (fast-path types only)
-    detail::register_async_waiter( mtx );
 
     auto dup_fd = nova::sync::detail::duplicate_native_handle( mtx.native_handle() );
     auto op     = std::make_shared< Op >( ioc, dup_fd, mtx, std::forward< Handler >( handler ) );

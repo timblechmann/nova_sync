@@ -4,6 +4,7 @@
 #include <catch2/catch_all.hpp>
 
 #include <nova/sync/mutex/concepts.hpp>
+#include <nova/sync/mutex/support/async_waiter_guard.hpp>
 
 #include "mutex_types.hpp"
 
@@ -367,6 +368,118 @@ TEMPLATE_TEST_CASE( "mutex implementations",
 
             REQUIRE( !acquired );
         }
+
+        // -----------------------------------------------------------------------
+        // Wakeup tests: verify that try_lock_for/try_lock_until wakes up correctly
+        // when the lock is released by another thread, not just by timeout.
+        //
+        // Thread A waits up to 10 s.  Thread B holds the lock for 5 s then
+        // releases it.  We expect:
+        //   • try_lock returns true (woken by B, not timed out)
+        //   • elapsed time is in [3 s, 9 s]  — well below the 10 s budget but
+        //     well above zero, with generous margins for slow/loaded cloud VMs.
+        // -----------------------------------------------------------------------
+        SECTION( "try_lock_for wakes up when lock is released (not timeout)" )
+        {
+            using clock = std::chrono::steady_clock;
+
+            // Pre-acquire so thread A will block immediately.
+            m.lock();
+
+            std::latch started { 1 }; // signals when thread A is about to wait
+            bool       acquired_in_a = false;
+
+            std::thread a( [ & ] {
+                started.count_down();
+                auto t0       = clock::now();
+                acquired_in_a = m.try_lock_for( 10s );
+                auto elapsed  = clock::now() - t0;
+                // Validate timing inside the thread — Catch2 assertions are thread-safe
+                // for INFO/REQUIRE when run under a single test binary.
+                INFO( "elapsed = " << elapsed );
+                if ( acquired_in_a ) {
+                    REQUIRE( elapsed >= 3s );
+                    REQUIRE( elapsed < 9s );
+                    m.unlock();
+                }
+            } );
+
+            // Give thread A time to enter the wait.
+            started.wait();
+            std::this_thread::sleep_for( 200ms ); // small extra margin
+
+            // Thread B: hold 5 s, then release.
+            std::this_thread::sleep_for( 5s );
+            m.unlock();
+
+            a.join();
+            REQUIRE( acquired_in_a );
+        }
+
+        SECTION( "try_lock_until (steady_clock) wakes up when lock is released (not timeout)" )
+        {
+            using clock = std::chrono::steady_clock;
+
+            m.lock();
+
+            std::latch started { 1 };
+            bool       acquired_in_a = false;
+
+            std::thread a( [ & ] {
+                started.count_down();
+                auto t0       = clock::now();
+                acquired_in_a = m.try_lock_until( t0 + 10s );
+                auto elapsed  = clock::now() - t0;
+                INFO( "elapsed = " << elapsed );
+                if ( acquired_in_a ) {
+                    REQUIRE( elapsed >= 3s );
+                    REQUIRE( elapsed < 9s );
+                    m.unlock();
+                }
+            } );
+
+            started.wait();
+            std::this_thread::sleep_for( 200ms );
+
+            std::this_thread::sleep_for( 5s );
+            m.unlock();
+
+            a.join();
+            REQUIRE( acquired_in_a );
+        }
+
+        SECTION( "try_lock_until (system_clock) wakes up when lock is released (not timeout)" )
+        {
+            using steady = std::chrono::steady_clock;
+            using system = std::chrono::system_clock;
+
+            m.lock();
+
+            std::latch started { 1 };
+            bool       acquired_in_a = false;
+
+            std::thread a( [ & ] {
+                started.count_down();
+                auto t0       = steady::now();
+                acquired_in_a = m.try_lock_until( system::now() + 10s );
+                auto elapsed  = steady::now() - t0;
+                INFO( "elapsed = " << elapsed );
+                if ( acquired_in_a ) {
+                    REQUIRE( elapsed >= 3s );
+                    REQUIRE( elapsed < 9s );
+                    m.unlock();
+                }
+            } );
+
+            started.wait();
+            std::this_thread::sleep_for( 200ms );
+
+            std::this_thread::sleep_for( 5s );
+            m.unlock();
+
+            a.join();
+            REQUIRE( acquired_in_a );
+        }
     }
 }
 
@@ -492,3 +605,119 @@ TEMPLATE_TEST_CASE( "pthread_rt_mutex: prevents priority inversion",
 }
 
 #endif // NOVA_SYNC_HAS_PTHREAD_RT_MUTEX
+
+// ---------------------------------------------------------------------------
+// async_waiter_guard tests
+// ---------------------------------------------------------------------------
+
+#ifdef NOVA_SYNC_ASYNC_MUTEX_TYPES
+
+TEMPLATE_TEST_CASE( "async_waiter_guard: try_acquire succeeds when lock is free",
+                    "[async_waiter_guard]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
+{
+    // Verify that try_acquire() on an unlocked mutex:
+    //   (a) returns true
+    //   (b) the guard is no longer active (remove_async_waiter not double-called)
+    //   (c) the lock is held after (unlock does not crash)
+    TestType mtx;
+
+    nova::sync::detail::async_waiter_guard< TestType > guard( mtx );
+    REQUIRE( guard.active() );
+
+    bool acquired = guard.try_acquire();
+    REQUIRE( acquired );
+    REQUIRE_FALSE( guard.active() ); // released internally by try_acquire
+
+    // Lock is owned — unlock should succeed cleanly
+    mtx.unlock();
+}
+
+TEMPLATE_TEST_CASE( "async_waiter_guard: try_acquire returns false when locked",
+                    "[async_waiter_guard]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
+{
+    TestType mtx;
+    mtx.lock(); // held — try_acquire must fail
+
+    {
+        nova::sync::detail::async_waiter_guard< TestType > guard( mtx );
+        REQUIRE( guard.active() );
+
+        bool acquired = guard.try_acquire();
+        REQUIRE_FALSE( acquired );
+        REQUIRE( guard.active() ); // still registered; will release on destruction
+    } // guard destroyed here — remove_async_waiter called
+
+    mtx.unlock();
+    REQUIRE( mtx.try_lock() ); // mutex is free again
+    mtx.unlock();
+}
+
+TEMPLATE_TEST_CASE( "async_waiter_guard: release is idempotent", "[async_waiter_guard]", NOVA_SYNC_ASYNC_MUTEX_TYPES )
+{
+    TestType mtx;
+
+    nova::sync::detail::async_waiter_guard< TestType > guard( mtx );
+    REQUIRE( guard.active() );
+
+    guard.release();
+    REQUIRE_FALSE( guard.active() );
+
+    guard.release(); // second call must be a no-op
+    REQUIRE_FALSE( guard.active() );
+}
+
+TEMPLATE_TEST_CASE( "async_waiter_guard: adopt constructor does not double-register",
+                    "[async_waiter_guard]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
+{
+    // Simulate the lock_slow() pattern: add_async_waiter() called manually,
+    // then guard adopted.  Lock must be acquirable and waiter count must be
+    // balanced (exactly one remove_async_waiter on exit).
+    TestType mtx;
+
+    if constexpr ( nova::sync::concepts::async_waiter_mutex< TestType > ) {
+        // Manually register once
+        mtx.add_async_waiter();
+
+        // Adopt — must NOT call add_async_waiter() again
+        nova::sync::detail::async_waiter_guard< TestType > guard( mtx, nova::sync::detail::adopt_async_waiter );
+        REQUIRE( guard.active() );
+
+        guard.release(); // calls remove_async_waiter once — should be balanced
+        REQUIRE_FALSE( guard.active() );
+
+        // If waiter count is balanced, try_lock should now work and unlock()
+        // should not post a spurious kernel notification.
+        REQUIRE( mtx.try_lock() );
+        mtx.unlock();
+    }
+}
+
+TEMPLATE_TEST_CASE( "async_waiter_guard: no stray notification after try_acquire cycle",
+                    "[async_waiter_guard]",
+                    NOVA_SYNC_ASYNC_MUTEX_TYPES )
+{
+    // After a sequence of lock/try_acquire/unlock cycles, the mutex must have
+    // no pending kernel notification (i.e. try_lock() succeeds immediately and
+    // a second try_lock() fails — confirming exactly one token).
+    TestType mtx;
+
+    const int rounds = 50;
+    for ( int i = 0; i < rounds; ++i ) {
+        nova::sync::detail::async_waiter_guard< TestType > guard( mtx );
+        bool                                               acquired = guard.try_acquire();
+        REQUIRE( acquired );
+        // Lock is held, guard released
+        mtx.unlock();
+    }
+
+    // After all cycles: try_lock must succeed (mutex is free, no stale notification)
+    REQUIRE( mtx.try_lock() );
+    // Second try_lock must fail (only one token)
+    REQUIRE_FALSE( mtx.try_lock() );
+    mtx.unlock();
+}
+
+#endif // NOVA_SYNC_ASYNC_MUTEX_TYPES

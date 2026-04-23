@@ -6,6 +6,8 @@
 #ifdef NOVA_SYNC_HAS_KQUEUE_MUTEX
 
 #    include <nova/sync/detail/backoff.hpp>
+#    include <nova/sync/detail/timed_wait.hpp>
+#    include <nova/sync/mutex/support/async_waiter_guard.hpp>
 
 #    include <sys/event.h>
 #    include <sys/time.h>
@@ -89,6 +91,9 @@ fast_kqueue_mutex::~fast_kqueue_mutex()
 
 void fast_kqueue_mutex::unlock() noexcept
 {
+    // Clear the lock bit and check if any waiters were registered.
+    // If prev > 1 (waiter count > 0), post NOTE_TRIGGER to wake one waiter.
+    // If prev == 1 (no waiters), skip the kernel call — fast-path optimization.
     uint32_t prev = state_.fetch_and( ~1u, std::memory_order_release );
 
     if ( prev > 1 ) {
@@ -121,19 +126,56 @@ void fast_kqueue_mutex::lock_slow() noexcept
         s = state_.load( std::memory_order_relaxed );
     }
 
-    s = state_.fetch_add( 2u, std::memory_order_relaxed ) + 2u;
+    s = add_async_waiter();
+    detail::async_waiter_guard< fast_kqueue_mutex > guard( *this, detail::adopt_async_waiter );
 
     while ( true ) {
         if ( ( s & 1u ) == 0 ) {
             uint32_t desired = ( s - 2u ) | 1u;
-            if ( state_.compare_exchange_weak( s, desired, std::memory_order_acquire, std::memory_order_relaxed ) )
+            if ( state_.compare_exchange_weak( s, desired, std::memory_order_acquire, std::memory_order_relaxed ) ) {
+                consume_lock();
+                guard.dismiss();
                 return;
+            }
             continue;
         }
 
         struct kevent out {};
         ::kevent( kqfd_, nullptr, 0, &out, 1, nullptr );
         s = state_.load( std::memory_order_relaxed );
+    }
+}
+
+bool fast_kqueue_mutex::try_lock_for_impl( std::chrono::nanoseconds rel_ns ) noexcept
+{
+    if ( rel_ns.count() <= 0 )
+        return try_lock();
+
+    uint32_t expected = 0;
+    if ( state_.compare_exchange_weak( expected, 1u, std::memory_order_acquire, std::memory_order_relaxed ) )
+        return true;
+
+    auto                                            s = add_async_waiter();
+    detail::async_waiter_guard< fast_kqueue_mutex > guard( *this, detail::adopt_async_waiter );
+
+    while ( true ) {
+        if ( ( s & 1u ) == 0 ) {
+            uint32_t desired = ( s - 2u ) | 1u;
+            if ( state_.compare_exchange_weak( s, desired, std::memory_order_acquire, std::memory_order_relaxed ) ) {
+                consume_lock();
+                guard.release();
+                return true;
+            }
+            continue;
+        }
+
+        if ( !detail::kevent_for( kqfd_, rel_ns ) )
+            // Timed out — guard destructor calls remove_async_waiter().
+            return false;
+
+
+        consume_lock();
+        s = state_.load( std::memory_order_acquire );
     }
 }
 

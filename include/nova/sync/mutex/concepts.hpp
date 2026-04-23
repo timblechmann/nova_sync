@@ -25,10 +25,20 @@ concept lockable = basic_lockable< M > && requires( M& m ) {
 };
 
 // timed_lockable: lockable + try_lock_for/duration and try_lock_until/time_point
+// Checks two distinct duration and time_point specialisations to enforce that
+// the methods are proper templates (not overloads for a single concrete type).
+// Also requires duration_type, a typedef exposing the effective timeout
+// resolution of the implementation (e.g. nanoseconds for ppoll/kevent,
+// milliseconds for WaitForSingleObject).
 template < typename M >
 concept timed_lockable = lockable< M > && requires( M& m ) {
-    { m.try_lock_for( std::chrono::milliseconds( 0 ) ) } -> std::convertible_to< bool >;
-    { m.try_lock_until( std::chrono::steady_clock::now() ) } -> std::convertible_to< bool >;
+    // duration_type: effective timeout granularity of the implementation
+    typename M::duration_type;
+    // try_lock_for must be a template accepting any duration specialisation
+    { m.try_lock_for( typename M::duration_type {} ) } -> std::convertible_to< bool >;
+    // try_lock_until must be a template accepting any time_point specialisation
+    { m.try_lock_until( std::chrono::steady_clock::time_point {} ) } -> std::convertible_to< bool >;
+    { m.try_lock_until( std::chrono::system_clock::time_point {} ) } -> std::convertible_to< bool >;
 };
 
 // shared_lockable: shared ownership semantics
@@ -40,10 +50,14 @@ concept shared_lockable = requires( M& m ) {
 };
 
 // shared_timed_lockable: shared_lockable + timed shared try-locks
+// Checks two distinct specialisations to enforce genericity.
+// Also requires duration_type consistent with timed_lockable.
 template < typename M >
 concept shared_timed_lockable = shared_lockable< M > && requires( M& m ) {
-    { m.try_lock_shared_for( std::chrono::milliseconds( 0 ) ) } -> std::convertible_to< bool >;
-    { m.try_lock_shared_until( std::chrono::steady_clock::now() ) } -> std::convertible_to< bool >;
+    typename M::duration_type;
+    { m.try_lock_shared_for( typename M::duration_type {} ) } -> std::convertible_to< bool >;
+    { m.try_lock_shared_until( std::chrono::steady_clock::time_point {} ) } -> std::convertible_to< bool >;
+    { m.try_lock_shared_until( std::chrono::system_clock::time_point {} ) } -> std::convertible_to< bool >;
 };
 
 // Convenience aliases for the concrete mutex categories
@@ -94,11 +108,21 @@ concept native_async_mutex = mutex< M > && requires( M& m ) {
 /// kernel signal on the uncontended fast path while still notifying the
 /// OS primitive when at least one async waiter is registered.
 ///
-/// Modelled by: `eventfd_mutex` (Linux), `fast_kqueue_mutex` (Apple).
+/// They also expose `consume_lock()` which drains a pending kernel
+/// notification without blocking.  This must be called after acquiring
+/// the lock via user-space CAS while registered as a waiter, because
+/// `unlock()` may have already posted the notification (it saw waiters > 0)
+/// before the CAS grabbed ownership.  Without draining, the stale
+/// notification would cause spurious wakeups (or busy-loops in event-loop
+/// integrations) for subsequent waiters.
+///
+/// Modelled by: `fast_eventfd_mutex` (Linux), `fast_kqueue_mutex` (Apple),
+///              `win32_event_mutex` (Windows).
 template < typename M >
 concept async_waiter_mutex = native_async_mutex< M > && requires( M& m ) {
     { m.add_async_waiter() };
     { m.remove_async_waiter() };
+    { m.consume_lock() };
 };
 
 } // namespace nova::sync::concepts
