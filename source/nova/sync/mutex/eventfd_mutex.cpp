@@ -7,6 +7,8 @@
 
 #    include <nova/sync/detail/backoff.hpp>
 #    include <nova/sync/detail/syscall.hpp>
+#    include <nova/sync/detail/timed_wait.hpp>
+#    include <nova/sync/mutex/support/async_waiter_guard.hpp>
 
 #    include <poll.h>
 #    include <sys/eventfd.h>
@@ -74,6 +76,9 @@ fast_eventfd_mutex::~fast_eventfd_mutex()
 
 void fast_eventfd_mutex::unlock() noexcept
 {
+    // Clear the lock bit and check if any waiters were registered.
+    // If prev > 1 (waiter count > 0), write a token to wake one waiter.
+    // If prev == 1 (no waiters), skip the kernel call — fast-path optimization.
     uint32_t prev = state_.fetch_and( ~1u, std::memory_order_release );
 
     if ( prev > 1 ) {
@@ -88,6 +93,22 @@ void fast_eventfd_mutex::consume_lock() const noexcept
     detail::read_intr( evfd_, &val, sizeof( val ) );
 }
 
+// Slow path for lock acquisition, entered after try_lock() fails.
+//
+// Phase 1 — Spin: Attempt CAS in a tight loop with exponential backoff.
+//           No waiter registration yet, so unlock() won't touch the kernel.
+//
+// Phase 2 — Register & wait: Once spinning is exhausted, register as a
+//           waiter via async_waiter_guard (add_async_waiter / fetch_add(2))
+//           and enter the blocking loop:
+//           a) If the lock bit is clear, try an atomic CAS that simultaneously
+//              decrements the waiter count and sets the lock bit:
+//              desired = (s - 2) | 1.  On success, call consume_lock() to
+//              drain any eventfd token unlock() may have written between our
+//              registration and this CAS.  Then call guard.dismiss() to avoid
+//              double-decrement (the CAS already subtracted 2).
+//           b) Otherwise, block on poll() until the eventfd is readable,
+//              consume the token, then retry the CAS loop.
 void fast_eventfd_mutex::lock_slow() noexcept
 {
     detail::exponential_backoff backoff;
@@ -104,12 +125,25 @@ void fast_eventfd_mutex::lock_slow() noexcept
         s = state_.load( std::memory_order_relaxed );
     }
 
-    s = state_.fetch_add( 2u, std::memory_order_relaxed ) + 2u;
+    // Phase 2: register as a waiter; the guard will call remove_async_waiter()
+    // on any exit path where the CAS below doesn't acquire the lock.
+    s = add_async_waiter(); // returns state *after* the +2 increment
+    detail::async_waiter_guard< fast_eventfd_mutex > guard( *this, detail::adopt_async_waiter );
+
     while ( true ) {
         if ( ( s & 1u ) == 0 ) {
+            // Atomically decrement waiter count and set lock bit in one CAS.
             uint32_t desired = ( s - 2u ) | 1u;
-            if ( state_.compare_exchange_weak( s, desired, std::memory_order_acquire, std::memory_order_relaxed ) )
+            if ( state_.compare_exchange_weak( s, desired, std::memory_order_acquire, std::memory_order_relaxed ) ) {
+                // We claimed ownership via the CAS path while registered as a
+                // waiter.  Between our poll() return (or initial registration)
+                // and this CAS, unlock() may have seen prev > 1 and written an
+                // eventfd token.  Drain it so subsequent waiters don't see a
+                // spurious wakeup.
+                consume_lock();
+                guard.release(); // waiter count already decremented in the CAS above
                 return;
+            }
             continue;
         }
 
@@ -119,6 +153,38 @@ void fast_eventfd_mutex::lock_slow() noexcept
             0,
         };
         detail::poll_intr( &pfd, 1 );
+
+        consume_lock();
+        s = state_.load( std::memory_order_acquire );
+    }
+}
+
+bool fast_eventfd_mutex::try_lock_for_ns( duration_type rel_ns ) noexcept
+{
+    if ( rel_ns.count() <= 0 )
+        return try_lock();
+
+    auto                                             s = add_async_waiter();
+    detail::async_waiter_guard< fast_eventfd_mutex > guard( *this, detail::adopt_async_waiter );
+
+    while ( true ) {
+        if ( ( s & 1u ) == 0 ) {
+            uint32_t desired = ( s - 2u ) | 1u;
+            if ( state_.compare_exchange_weak( s, desired, std::memory_order_acquire, std::memory_order_relaxed ) ) {
+                // We claimed ownership via the CAS path while registered as an
+                // async waiter — consume any pending eventfd token to avoid
+                // leaving a stray notification for subsequent waiters.
+                consume_lock();
+                guard.release(); // waiter count already decremented in the CAS above
+                return true;
+            }
+            continue;
+        }
+
+        if ( !detail::ppoll_for( evfd_, rel_ns ) ) {
+            // Timed out — guard destructor calls remove_async_waiter().
+            return false;
+        }
 
         consume_lock();
         s = state_.load( std::memory_order_acquire );

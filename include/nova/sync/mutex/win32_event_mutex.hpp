@@ -11,7 +11,9 @@
 #ifdef NOVA_SYNC_HAS_WIN32_EVENT_MUTEX
 
 #    include <atomic>
+#    include <chrono>
 #    include <nova/sync/detail/compat.hpp>
+#    include <nova/sync/detail/timed_wait.hpp>
 
 typedef void* HANDLE;
 
@@ -24,6 +26,8 @@ class win32_event_mutex
 public:
     /// @brief The native handle type — a Win32 HANDLE.
     using native_handle_type = HANDLE;
+    /// @brief Effective timeout resolution (WaitForSingleObject is millisecond-granularity).
+    using duration_type      = std::chrono::milliseconds;
 
     /// @brief Constructs an unlocked win32_event_mutex.
     win32_event_mutex();
@@ -38,6 +42,98 @@ public:
     /// @return `true` if lock acquired, `false` if already locked.
     bool try_lock() noexcept;
 
+    /// @brief Attempts to acquire the lock, blocking for up to @p rel_ms milliseconds.
+    ///
+    /// Single WaitForSingleObject call per attempt — no calls to now().
+    ///
+    /// @return `true` if the lock was acquired, `false` if the duration expired.
+    bool try_lock_for( duration_type rel_ms ) noexcept
+    {
+        if ( rel_ms.count() <= 0 )
+            return try_lock();
+        while ( !try_lock() ) {
+            if ( !detail::wait_handle_for( handle_, rel_ms ) )
+                return try_lock(); // one last attempt after timeout
+        }
+        return true;
+    }
+
+    /// @brief Attempts to acquire the lock, blocking for up to @p rel_time.
+    ///
+    /// Ceiling-rounds the duration to milliseconds and delegates.
+    ///
+    /// @return `true` if the lock was acquired, `false` if the duration expired.
+    template < class Rep, class Period >
+    bool try_lock_for( const std::chrono::duration< Rep, Period >& rel_time )
+    {
+        // Ceiling-round to milliseconds so we never under-wait.
+        auto                ns        = std::chrono::duration_cast< std::chrono::nanoseconds >( rel_time );
+        constexpr long long ns_per_ms = 1'000'000LL;
+        auto                rel_ms    = duration_type { ( ns.count() + ns_per_ms - 1 ) / ns_per_ms };
+        return try_lock_for( rel_ms );
+    }
+
+    /// @brief Attempts to acquire the lock, blocking until @p abs_time is reached.
+    ///
+    /// For system_clock and steady_clock, dispatches to platform-specific wait_handle_until
+    /// overloads that use native timer handles.  For other clocks, falls back to try_lock_for
+    /// with deadline-computed remaining duration.
+    ///
+    /// @return `true` if the lock was acquired, `false` if the deadline expired.
+    template < class Clock, class Duration >
+    bool try_lock_until( const std::chrono::time_point< Clock, Duration >& abs_time )
+    {
+        return try_lock_until_impl( abs_time,
+                                    std::is_same< Clock, std::chrono::system_clock > {},
+                                    std::is_same< Clock, std::chrono::steady_clock > {} );
+    }
+
+private:
+    // Specialization for system_clock: dispatch to detail::wait_handle_until
+    template < class Duration >
+    bool try_lock_until_impl( const std::chrono::time_point< std::chrono::system_clock, Duration >& abs_time,
+                              std::true_type,   // is system_clock
+                              std::false_type ) // is not steady_clock
+    {
+        while ( !try_lock() ) {
+            if ( !detail::wait_handle_until( handle_, abs_time ) )
+                return try_lock(); // one last attempt after timeout
+        }
+        return true;
+    }
+
+    // Specialization for steady_clock: dispatch to detail::wait_handle_until
+    template < class Duration >
+    bool try_lock_until_impl( const std::chrono::time_point< std::chrono::steady_clock, Duration >& abs_time,
+                              std::false_type, // is not system_clock
+                              std::true_type ) // is steady_clock
+    {
+        while ( !try_lock() ) {
+            if ( !detail::wait_handle_until( handle_, abs_time ) )
+                return try_lock(); // one last attempt after timeout
+        }
+        return true;
+    }
+
+    // Fallback for unknown clocks: compute remaining and delegate to try_lock_for
+    template < class Clock, class Duration >
+    bool try_lock_until_impl( const std::chrono::time_point< Clock, Duration >& abs_time,
+                              std::false_type,  // is not system_clock
+                              std::false_type ) // is not steady_clock
+    {
+        while ( true ) {
+            auto rem = std::chrono::ceil< duration_type >( abs_time - Clock::now() );
+            if ( rem.count() <= 0 )
+                return try_lock();
+            if ( try_lock_for( rem ) )
+                return true;
+            auto rem2 = std::chrono::ceil< duration_type >( abs_time - Clock::now() );
+            if ( rem2.count() <= 0 )
+                return try_lock();
+        }
+    }
+
+public:
     /// @brief Releases the lock and wakes one waiting thread if any.
     void unlock() noexcept;
 
@@ -61,12 +157,20 @@ public:
         state_.fetch_sub( 2u, std::memory_order_relaxed );
     }
 
+    /// @brief Drain one pending kernel notification (if any) without blocking.
+    ///
+    /// Must be called after acquiring the lock via user-space CAS while
+    /// registered as an async waiter.  On Windows this drains a pending
+    /// semaphore signal so it doesn't cause a spurious wakeup for the next
+    /// waiter.
+    ///
+    /// Calling it when no signal is pending is harmless.
+    void consume_lock() const noexcept;
+
 private:
     HANDLE                  handle_ { nullptr };
     std::atomic< uint32_t > state_ { 0 }; // Bit 0: locked; Bits 1-31: waiter count
     HANDLE                  event_ { nullptr };
-
-    void consume_lock() const noexcept;
 };
 
 } // namespace nova::sync

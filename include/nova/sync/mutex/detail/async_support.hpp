@@ -4,6 +4,7 @@
 #pragma once
 
 #include <nova/sync/mutex/concepts.hpp>
+#include <nova/sync/mutex/support/async_waiter_guard.hpp>
 
 #if __cplusplus >= 202302L && __has_include( <expected> )
 #    define NOVA_SYNC_HAS_EXPECTED
@@ -22,85 +23,11 @@
 #if defined( NOVA_SYNC_HAS_EXPECTED )
 
 #    include <cassert>
+#    include <functional>
 #    include <mutex>
 #    include <system_error>
 
-#    if defined( __linux__ ) || defined( __APPLE__ )
-#        include <unistd.h>
-#    endif
-
 namespace nova::sync::detail {
-
-// ---------------------------------------------------------------------------
-// RAII wrapper for file descriptors (POSIX only)
-// ---------------------------------------------------------------------------
-
-#    if defined( __linux__ ) || defined( __APPLE__ )
-class scoped_file_descriptor
-{
-public:
-    scoped_file_descriptor() noexcept = default;
-
-    explicit scoped_file_descriptor( int fd ) noexcept :
-        fd_( fd )
-    {}
-
-    // Construct by duplicating an existing fd
-    static scoped_file_descriptor from_dup( int source_fd ) noexcept
-    {
-        if ( source_fd < 0 )
-            return scoped_file_descriptor( -1 );
-        int dup_fd = ::dup( source_fd );
-        return scoped_file_descriptor( dup_fd );
-    }
-
-    ~scoped_file_descriptor() noexcept
-    {
-        if ( fd_ >= 0 )
-            ::close( fd_ );
-    }
-
-    // Non-copyable, moveable
-    scoped_file_descriptor( const scoped_file_descriptor& )            = delete;
-    scoped_file_descriptor& operator=( const scoped_file_descriptor& ) = delete;
-
-    scoped_file_descriptor( scoped_file_descriptor&& other ) noexcept :
-        fd_( other.release() )
-    {}
-    scoped_file_descriptor& operator=( scoped_file_descriptor&& other ) noexcept
-    {
-        reset( other.release() );
-        return *this;
-    }
-
-    int get() const noexcept
-    {
-        return fd_;
-    }
-
-    int release() noexcept
-    {
-        int tmp = fd_;
-        fd_     = -1;
-        return tmp;
-    }
-
-    void reset( int fd = -1 ) noexcept
-    {
-        if ( fd_ >= 0 )
-            ::close( fd_ );
-        fd_ = fd;
-    }
-
-    explicit operator bool() const noexcept
-    {
-        return fd_ >= 0;
-    }
-
-private:
-    int fd_ = -1;
-};
-#    endif // __linux__ || __APPLE__
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -162,17 +89,40 @@ void invoke_with_error( Handler&& handler, std::errc ec )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// @brief Try to acquire the lock after the kernel primitive signals readability.
+///
+/// Delegates to `async_waiter_guard::try_acquire()`.  Prefer using
+/// `async_waiter_guard` directly; this free function exists for call-sites
+/// that cannot easily carry a guard reference.
+///
+/// POSIX (Linux / macOS):
+///   The fd becoming readable only signals that `unlock()` was called.
+///   `try_lock()` is a user-space CAS for `fast_*` mutexes; on success
+///   `consume_lock()` drains the stale kernel notification.  For simple
+///   (non-fast) mutexes `try_lock()` itself consumes the kernel token.
+///
+/// Windows (`win32_event_mutex`):
+///   `try_lock()` atomically drains the semaphore token (the actual lock).
+///   `consume_lock()` separately drains the auto-reset `event_` notification
+///   that `unlock()` posted via `SetEvent()`.  Without it the event remains
+///   signalled and causes a spurious wakeup for the next registered waiter.
+///
+/// @return `true` if the lock was successfully acquired.
 inline bool platform_try_acquire_after_wait( auto& mtx )
 {
-#    if defined( __linux__ ) || defined( __APPLE__ )
-    // POSIX: must try to acquire, otherwise we have a suprious wakeup
-    return mtx.try_lock();
-#    elif defined( _WIN32 )
-    // Windows: ownership is already held; just verify no error
-    // The ec parameter comes from the async_wait completion; if non-zero,
-    // the completion failed (e.g., WAIT_ABANDONED).
-    return true; // Already own the lock
-#    endif
+    if ( !mtx.try_lock() )
+        return false; // spurious wakeup — retry
+
+    // Drain the kernel notification that unlock() posted.
+    // - POSIX fast_* mutexes: try_lock() is a pure CAS; stale fd event remains.
+    // - Windows win32_event_mutex: try_lock() takes the semaphore; stale event_ remains.
+    // - Plain kqueue_mutex / eventfd_mutex: try_lock() itself consumes the token.
+    if constexpr ( concepts::async_waiter_mutex< std::remove_reference_t< decltype( mtx ) > > )
+        mtx.consume_lock();
+
+    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -181,6 +131,7 @@ inline bool platform_try_acquire_after_wait( auto& mtx )
 ///
 /// For mutexes that support the `async_waiter_mutex` concept, increments
 /// the waiter count. For simple mutexes, this is a no-op.
+/// @deprecated Prefer `async_waiter_guard` which manages the lifetime automatically.
 template < typename Mutex >
 inline void register_async_waiter( Mutex& mtx ) noexcept
 {
@@ -192,11 +143,31 @@ inline void register_async_waiter( Mutex& mtx ) noexcept
 ///
 /// For mutexes that support the `async_waiter_mutex` concept, decrements
 /// the waiter count. For simple mutexes, this is a no-op.
+/// @deprecated Prefer `async_waiter_guard` which manages the lifetime automatically.
 template < typename Mutex >
 inline void unregister_async_waiter( Mutex& mtx ) noexcept
 {
     if constexpr ( concepts::async_waiter_mutex< Mutex > )
         mtx.remove_async_waiter();
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// @brief Higher-order function: registers a waiter, calls @p fn, then
+///        unregisters. Returns the result of @p fn.
+///
+/// Equivalent to:
+/// @code
+///   async_waiter_guard guard(mtx);
+///   return std::invoke(fn);
+/// @endcode
+///
+/// The guard is released after @p fn returns (or throws).
+template < typename Mutex, typename Fn >
+decltype( auto ) with_async_waiter( Mutex& mtx, Fn&& fn )
+{
+    async_waiter_guard< Mutex > guard( mtx );
+    return std::invoke( std::forward< Fn >( fn ) );
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

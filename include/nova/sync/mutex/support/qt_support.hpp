@@ -36,7 +36,7 @@
 ///       });
 /// @endcode
 
-#include <nova/sync/detail/async_support.hpp>
+#include <nova/sync/mutex/detail/async_support.hpp>
 
 #if defined( NOVA_SYNC_HAS_EXPECTED ) && __has_include( <QCoreApplication> )
 
@@ -44,6 +44,7 @@
 #    include <future>
 #    include <memory>
 #    include <mutex>
+#    include <optional>
 #    include <system_error>
 
 #    include <QtCore/QObject>
@@ -56,9 +57,10 @@
 #        include <QtCore/QWinEventNotifier>
 #    endif
 
-#    include <nova/sync/detail/async_support.hpp>
+#    include <nova/sync/detail/native_handle_support.hpp>
 #    include <nova/sync/detail/syscall.hpp>
 #    include <nova/sync/mutex/concepts.hpp>
+#    include <nova/sync/mutex/detail/async_support.hpp>
 
 namespace nova::sync {
 
@@ -95,11 +97,11 @@ inline void delete_notifier( QtNotifier* notifier )
 template < typename Mutex, typename Handler >
 struct qt_acquire_op : std::enable_shared_from_this< qt_acquire_op< Mutex, Handler > >
 {
-    Mutex&                 mtx_;
-    QObject*               context_;
-    Handler                handler_;
-    QPointer< QtNotifier > notifier_;
-    bool                   waiter_registered_ { false };
+    Mutex&                                               mtx_;
+    QObject*                                             context_;
+    Handler                                              handler_;
+    QPointer< QtNotifier >                               notifier_;
+    std::optional< detail::async_waiter_guard< Mutex > > waiter_guard_;
 #    if defined( __linux__ ) || defined( __APPLE__ )
     detail::scoped_file_descriptor dup_fd_;
 #    endif
@@ -112,8 +114,6 @@ struct qt_acquire_op : std::enable_shared_from_this< qt_acquire_op< Mutex, Handl
 
     ~qt_acquire_op()
     {
-        if ( waiter_registered_ )
-            detail::unregister_async_waiter( mtx_ );
         delete_notifier( notifier_ );
     }
 
@@ -125,8 +125,7 @@ struct qt_acquire_op : std::enable_shared_from_this< qt_acquire_op< Mutex, Handl
         }
 
         // Register as a waiter so unlock() will trigger the notifier
-        detail::register_async_waiter( mtx_ );
-        waiter_registered_ = true;
+        waiter_guard_.emplace( mtx_ );
 
         create_and_arm_notifier();
     }
@@ -162,12 +161,8 @@ private:
         if ( notifier_ )
             notifier_->setEnabled( false );
 
-        if ( platform_try_acquire_after_wait( mtx_ ) ) {
-            // Successfully acquired — notify and deliver result
-            if ( waiter_registered_ ) {
-                detail::unregister_async_waiter( mtx_ );
-                waiter_registered_ = false;
-            }
+        if ( waiter_guard_->try_acquire() ) {
+            // Successfully acquired — deliver result
             if ( notifier_ ) {
                 delete_notifier( notifier_ );
                 notifier_ = nullptr;
@@ -188,13 +183,13 @@ private:
 template < typename Mutex, typename Handler >
 struct qt_acquire_cancellable_op : std::enable_shared_from_this< qt_acquire_cancellable_op< Mutex, Handler > >
 {
-    Mutex&                 mtx_;
-    QObject*               context_;
-    Handler                handler_;
-    QPointer< QtNotifier > notifier_;
-    std::atomic< bool >    cancellation_requested_ { false };
-    std::atomic< bool >    handler_invoked_ { false };
-    bool                   waiter_registered_ { false };
+    Mutex&                                               mtx_;
+    QObject*                                             context_;
+    Handler                                              handler_;
+    QPointer< QtNotifier >                               notifier_;
+    std::atomic< bool >                                  cancellation_requested_ { false };
+    std::atomic< bool >                                  handler_invoked_ { false };
+    std::optional< detail::async_waiter_guard< Mutex > > waiter_guard_;
 #    if defined( __linux__ ) || defined( __APPLE__ )
     detail::scoped_file_descriptor dup_fd_;
 #    endif
@@ -207,8 +202,6 @@ struct qt_acquire_cancellable_op : std::enable_shared_from_this< qt_acquire_canc
 
     ~qt_acquire_cancellable_op()
     {
-        if ( waiter_registered_ )
-            detail::unregister_async_waiter( mtx_ );
         delete_notifier( notifier_ );
     }
 
@@ -246,8 +239,7 @@ struct qt_acquire_cancellable_op : std::enable_shared_from_this< qt_acquire_canc
         }
 
         // Register as a waiter so unlock() will trigger the notifier
-        detail::register_async_waiter( mtx_ );
-        waiter_registered_ = true;
+        waiter_guard_.emplace( mtx_ );
 
         create_and_arm_notifier();
     }
@@ -309,10 +301,7 @@ private:
             notifier_->setEnabled( false );
 
         if ( is_cancelled() ) {
-            if ( waiter_registered_ ) {
-                detail::unregister_async_waiter( mtx_ );
-                waiter_registered_ = false;
-            }
+            waiter_guard_.reset();
             if ( notifier_ ) {
                 delete_notifier( notifier_ );
                 notifier_ = nullptr;
@@ -321,24 +310,17 @@ private:
             return;
         }
 
-        if ( platform_try_acquire_after_wait( mtx_ ) ) {
-            // Double-check cancel race after acquiring
+        if ( waiter_guard_->try_acquire() ) {
+            // Lock acquired; guard is already released by try_acquire().
+            // Double-check cancel race after acquiring.
             if ( is_cancelled() ) {
                 mtx_.unlock();
-                if ( waiter_registered_ ) {
-                    detail::unregister_async_waiter( mtx_ );
-                    waiter_registered_ = false;
-                }
                 if ( notifier_ ) {
                     delete_notifier( notifier_ );
                     notifier_ = nullptr;
                 }
                 deliver_cancellation();
                 return;
-            }
-            if ( waiter_registered_ ) {
-                detail::unregister_async_waiter( mtx_ );
-                waiter_registered_ = false;
             }
             if ( notifier_ ) {
                 delete_notifier( notifier_ );
