@@ -47,6 +47,9 @@ template < typename Mutex >
 class async_waiter_guard
 {
 public:
+    /// @brief Constructs a guard and registers an async waiter.
+    ///
+    /// @param mtx The mutex to guard.
     explicit async_waiter_guard( Mutex& mtx ) noexcept :
         mtx_( mtx )
     {
@@ -76,6 +79,9 @@ public:
         release();
     }
 
+    /// @brief Attempts to acquire the lock and release the guard atomically.
+    ///
+    /// @return `true` if lock was acquired and guard released; `false` otherwise.
     [[nodiscard]] bool try_acquire() noexcept
     {
         if ( !mtx_.try_lock() )
@@ -90,6 +96,7 @@ public:
         return true;
     }
 
+    /// @brief Cancels the pending acquire and unregisters the waiter. Idempotent.
     void release() noexcept
     {
         if ( active_ ) {
@@ -99,11 +106,17 @@ public:
         }
     }
 
+    /// @brief Marks the guard as inactive without unregistering the waiter.
+    ///
+    /// Allows manual management of the waiter registration after acquiring the lock.
     void dismiss() noexcept
     {
         active_ = false;
     }
 
+    /// @brief Returns whether the guard is currently active.
+    ///
+    /// @return `true` if the guard is active; `false` if already released or dismissed.
     [[nodiscard]] bool active() const noexcept
     {
         return active_;

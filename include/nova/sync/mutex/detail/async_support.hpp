@@ -97,17 +97,8 @@ void invoke_with_error( Handler&& handler, std::errc ec )
 /// `async_waiter_guard` directly; this free function exists for call-sites
 /// that cannot easily carry a guard reference.
 ///
-/// POSIX (Linux / macOS):
-///   The fd becoming readable only signals that `unlock()` was called.
-///   `try_lock()` is a user-space CAS for `fast_*` mutexes; on success
-///   `consume_lock()` drains the stale kernel notification.  For simple
-///   (non-fast) mutexes `try_lock()` itself consumes the kernel token.
-///
-/// Windows (`win32_event_mutex`):
-///   `try_lock()` atomically drains the semaphore token (the actual lock).
-///   `consume_lock()` separately drains the auto-reset `event_` notification
-///   that `unlock()` posted via `SetEvent()`.  Without it the event remains
-///   signalled and causes a spurious wakeup for the next registered waiter.
+/// Attempts to acquire the lock and, on success, drains any pending kernel
+/// notifications to prevent spurious wakeups for other waiters.
 ///
 /// @return `true` if the lock was successfully acquired.
 inline bool platform_try_acquire_after_wait( auto& mtx )
@@ -115,10 +106,7 @@ inline bool platform_try_acquire_after_wait( auto& mtx )
     if ( !mtx.try_lock() )
         return false; // spurious wakeup — retry
 
-    // Drain the kernel notification that unlock() posted.
-    // - POSIX fast_* mutexes: try_lock() is a pure CAS; stale fd event remains.
-    // - Windows win32_event_mutex: try_lock() takes the semaphore; stale event_ remains.
-    // - Plain kqueue_mutex / eventfd_mutex: try_lock() itself consumes the token.
+    // For async_waiter_mutex types, drain the kernel notification.
     if constexpr ( concepts::async_waiter_mutex< std::remove_reference_t< decltype( mtx ) > > )
         mtx.consume_lock();
 
