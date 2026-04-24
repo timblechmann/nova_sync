@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 // SPDX-FileCopyrightText: 2026 Tim Blechmann
 
+/// @file boost_asio_support.hpp
+/// Asynchronous mutex acquisition helpers built on Boost.ASIO.
+
 #pragma once
 
 #include <nova/sync/mutex/concepts.hpp>
@@ -317,6 +320,10 @@ async_acquire_future_state< Mutex > async_acquire( boost::asio::io_context& ioc,
 /// is dispatched to @p ioc via `boost::asio::dispatch` — it fires
 /// asynchronously on the next `ioc.run()` iteration.
 ///
+/// @param ioc     Boost.ASIO io_context for async operations.
+/// @param mtx     A mutex satisfying `native_async_mutex` with `native_handle()`.
+/// @param handler Callable invoked with `expected<std::unique_lock<Mutex>, std::error_code>`.
+///
 /// Lifetime
 /// --------
 /// - @p ioc must remain live until @p handler fires.
@@ -378,6 +385,11 @@ void async_acquire( boost::asio::io_context& ioc, Mutex& mtx, Handler&& handler 
 /// - Destroying the handle automatically cancels any pending wait; the
 ///   handler is called with `errc::operation_canceled`.
 /// - On cancellation @p handler is called with `errc::operation_canceled`.
+///
+/// @param ioc     Boost.ASIO io_context for async operations.
+/// @param mtx     A mutex satisfying `native_async_mutex` with `native_handle()`.
+/// @param handler Callable invoked with `expected<std::unique_lock<Mutex>, std::error_code>`.
+/// @return Handle allowing cancellation of the pending acquire operation.
 ///
 /// Example
 /// -------

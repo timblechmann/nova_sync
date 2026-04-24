@@ -34,48 +34,25 @@ bool kevent_until( int                                                         k
 // ============================================================================
 #elif defined( _WIN32 )
 
-/// @brief Single WaitForSingleObject call with relative millisecond timeout and retries.
+/// @brief Wait on a handle for up to the specified duration.
 ///
-/// Automatically recomputes timeout on timeout and retries.  May make now() calls internally.
-/// The caller is responsible for ceiling-rounding to milliseconds before calling.
-///
-/// @param handle  Win32 HANDLE to wait on.
-/// @param rel_ms  Relative timeout in milliseconds.  Must be > 0.
 /// @return `true` if the handle was signaled, `false` on timeout or error.
 bool wait_handle_for( HANDLE handle, std::chrono::milliseconds rel_ms ) noexcept;
 
-/// @brief Wait on two handles: the lock handle and a timer handle.
+/// @brief Wait on a lock handle until a timer signals or lock is signaled.
 ///
-/// No calls to now() needed; the timer handle manages the deadline.
-///
-/// @param lock_handle   The lock handle to wait on.
-/// @param timer_handle  The timer handle (set to absolute deadline).
-/// @return `true` if @p lock_handle is signaled, `false` if timer fires (timeout).
+/// @return `true` if @p lock_handle is signaled, `false` if timer fires or on error.
 bool wait_handle_until( HANDLE lock_handle, HANDLE timer_handle ) noexcept;
 
-/// @brief Wait on a lock handle until an absolute deadline (system_clock specialization).
+/// @brief Wait on a lock handle until an absolute deadline (system_clock).
 ///
-/// Creates a waitable timer internally, sets it to the deadline, and waits
-/// on both the lock handle and the timer handle simultaneously using
-/// WaitForMultipleObjects.  The timer is automatically destroyed when the
-/// function returns.
-///
-/// @param lock_handle  The lock handle to wait on.
-/// @param deadline     Absolute time_point on system_clock to wait until.
-/// @return `true` if @p lock_handle is signaled, `false` if deadline expires.
+/// @return `true` if signaled, `false` on timeout or error.
 bool wait_handle_until( HANDLE                                                      lock_handle,
                         const std::chrono::time_point< std::chrono::system_clock >& deadline ) noexcept;
 
-/// @brief Wait on a lock handle until an absolute deadline (steady_clock specialization).
+/// @brief Wait on a lock handle until an absolute deadline (steady_clock).
 ///
-/// Creates a waitable timer internally, sets it to the deadline, and waits
-/// on both the lock handle and the timer handle simultaneously using
-/// WaitForMultipleObjects.  The timer is automatically destroyed when the
-/// function returns.
-///
-/// @param lock_handle  The lock handle to wait on.
-/// @param deadline     Absolute time_point on steady_clock to wait until.
-/// @return `true` if @p lock_handle is signaled, `false` if deadline expires.
+/// @return `true` if signaled, `false` on timeout or error.
 bool wait_handle_until( HANDLE                                                      lock_handle,
                         const std::chrono::time_point< std::chrono::steady_clock >& deadline ) noexcept;
 

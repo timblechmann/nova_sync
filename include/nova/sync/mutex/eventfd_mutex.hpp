@@ -137,83 +137,17 @@ private:
 };
 
 
-/// @brief Async-capable mutex implemented via Linux `eventfd` with fast user-space path.
+/// @brief Fast async-capable mutex optimized for event loop integration.
 ///
-/// State Layout
-/// ------------
-/// `state_` is an atomic `uint32_t` with the following encoding:
+/// Provides user-space fast path with kernel fallback for high-contention scenarios.
+/// Ideal for integration with event loops (Boost.Asio, Qt, libdispatch).
 ///
-///   - **Bit 0** (lock bit): 1 = locked, 0 = unlocked.
-///   - **Bits 1–31** (waiter count): number of registered waiters × 2.
-///     Each waiter adds 2 to `state_` so the waiter count occupies the
-///     upper 31 bits without interfering with the lock bit.
+/// To integrate with an event loop:
+///  1. Call `add_async_waiter()` before waiting on `native_handle()`.
+///  2. After `try_lock()` succeeds, call `consume_lock()`.
+///  3. Call `remove_async_waiter()` when done or on timeout.
 ///
-/// The fast path (`lock()` / `try_lock()`) operates entirely in user-space
-/// via CAS on bit 0.  No kernel call is made on the uncontended path.
-///
-/// `unlock()` clears bit 0 via `fetch_and(~1u)`.  If the previous state was
-/// `> 1` (at least one waiter registered), it writes a token to the eventfd
-/// to wake exactly one waiter.  If no waiters are registered, the kernel is
-/// not touched — this is the fast-path optimization.
-///
-/// Waiter Registration Protocol
-/// ----------------------------
-/// Any code that plans to wait on the eventfd must call
-/// `add_async_waiter()` before monitoring the fd, and either:
-///
-///   (a) `remove_async_waiter()` if it abandons the wait (timeout /
-///       cancellation) without acquiring the lock, or
-///
-///   (b) atomically decrement the waiter count as part of the CAS that
-///       sets the lock bit: `desired = (s - 2) | 1`.  In this case the
-///       caller must also call `consume_lock()` to drain any pending
-///       eventfd token that `unlock()` may have posted between the
-///       waiter registration and the CAS.
-///
-/// Why `consume_lock()` is Required
-/// --------------------------------
-/// Consider: waiter registers (`state_ += 2`), then `unlock()` sees
-/// `prev > 1` and writes a token.  Before the waiter enters the
-/// kernel wait, it re-checks `state_` and finds the lock bit clear —
-/// so it grabs ownership via CAS.  The eventfd token is now stale.
-///
-/// For **event-loop integrations** (Boost.Asio, libdispatch, Qt), the
-/// stale token makes the eventfd appear readable.  The event handler fires,
-/// calls `try_lock()` (which is a pure CAS — it never reads the eventfd),
-/// fails, re-arms, and the fd is *still* readable → immediate re-fire →
-/// **busy-loop**.  `consume_lock()` performs a non-blocking `read()` to
-/// drain the stale token.
-///
-/// Async Waiter Integration
-/// -------------------------
-/// When integrating with event loop systems (Qt, Boost.Asio, etc.), call
-/// `add_async_waiter()` before waiting on the `native_handle()` file descriptor,
-/// and `remove_async_waiter()` after the wait completes or is cancelled.  This
-/// ensures the fast-path optimization remains correct: if any async waiter is
-/// pending, `unlock()` will always trigger the eventfd.
-///
-/// After the event loop detects readability and `try_lock()` succeeds, call
-/// `consume_lock()` to drain the stale eventfd token before releasing
-/// the waiter registration.  The helper `platform_try_acquire_after_wait()`
-/// in `async_support.hpp` does both steps automatically.
-///
-/// Example
-/// -------
-/// @code
-///   fast_eventfd_mutex mtx;
-///   int fd = mtx.native_handle();
-///
-///   mtx.add_async_waiter();  // Register before waiting on fd
-///   // Wait on fd for readability (via select/poll/epoll/Qt/etc.)
-///   if (mtx.try_lock()) {
-///       mtx.consume_lock();      // Drain stale eventfd token
-///       mtx.remove_async_waiter();
-///       // ... critical section ...
-///       mtx.unlock();
-///   } else {
-///       // Spurious wakeup — re-arm the wait
-///   }
-/// @endcode
+/// Use `async_waiter_guard` for automatic lifetime management.
 ///
 class alignas( detail::hardware_destructive_interference_size ) fast_eventfd_mutex
 {
@@ -330,11 +264,9 @@ public:
         return evfd_;
     }
 
-    /// @brief Register an async waiter.
+    /// @brief Register an async waiter before polling the file descriptor.
     ///
-    /// Increments the waiter count so that `unlock()` writes to the eventfd
-    /// even when called from the fast path.  Must be balanced by a call to
-    /// `remove_async_waiter()`.
+    /// Must be paired with `remove_async_waiter()` or by consuming the lock after successful acquisition.
     uint32_t add_async_waiter() noexcept
     {
         return state_.fetch_add( 2u, std::memory_order_relaxed ) + 2u;
@@ -346,17 +278,10 @@ public:
         state_.fetch_sub( 2u, std::memory_order_relaxed );
     }
 
-    /// @brief Drain one pending kernel notification (if any) without blocking.
+    /// @brief Drain pending kernel notifications after acquiring the lock.
     ///
-    /// Must be called after acquiring the lock via user-space CAS while
-    /// registered as an async waiter.  In that situation `unlock()` may have
-    /// already written an eventfd token (because it saw `state_ > 1`); if
-    /// ownership was then obtained through the CAS path rather than by
-    /// consuming the token, the stale token remains queued and would cause
-    /// a spurious wakeup for the next waiter.
-    ///
-    /// This is a non-blocking operation (non-blocking `read()` on the eventfd).
-    /// Calling it when no token is pending is harmless.
+    /// Call this after `try_lock()` succeeds while registered as an async waiter.
+    /// Safe to call when no notifications are pending.
     void consume_lock() const noexcept;
 
 private:

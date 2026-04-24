@@ -19,8 +19,7 @@ typedef void* HANDLE;
 
 namespace nova::sync {
 
-/// @brief Async-capable, non-recursive mutex using Win32 Semaphore and auto-reset Event.
-///
+/// @brief Async-capable mutex using Win32 synchronization primitives.
 class win32_event_mutex
 {
 public:
@@ -147,24 +146,22 @@ public:
         return handle_;
     }
 
+    /// @brief Register an async waiter before waiting on the native handle.
     void add_async_waiter() noexcept
     {
         state_.fetch_add( 2u, std::memory_order_relaxed );
     }
 
+    /// @brief Unregister a previously added async waiter.
     void remove_async_waiter() noexcept
     {
         state_.fetch_sub( 2u, std::memory_order_relaxed );
     }
 
-    /// @brief Drain one pending kernel notification (if any) without blocking.
+    /// @brief Drain pending kernel notifications after acquiring the lock.
     ///
-    /// Must be called after acquiring the lock via user-space CAS while
-    /// registered as an async waiter.  On Windows this drains a pending
-    /// semaphore signal so it doesn't cause a spurious wakeup for the next
-    /// waiter.
-    ///
-    /// Calling it when no signal is pending is harmless.
+    /// Call this after successfully acquiring the lock while registered as an async waiter.
+    /// Safe to call when no notifications are pending.
     void consume_lock() const noexcept;
 
 private:

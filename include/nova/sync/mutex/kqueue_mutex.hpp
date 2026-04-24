@@ -125,21 +125,17 @@ private:
 };
 
 
-/// @brief Async-capable mutex implemented via Apple `kqueue` with fast user-space path.
+/// @brief Fast async-capable mutex optimized for event loop integration.
 ///
-/// Async Waiter Integration
-/// -------------------------
-/// When integrating with event loop systems (Qt, Boost.Asio, etc.), call
-/// `add_async_waiter()` before waiting on the `native_handle()` file descriptor,
-/// and `remove_async_waiter()` after the wait completes or is cancelled.  This
-/// ensures the fast-path optimization remains correct: if any async waiter is
-/// pending, `unlock()` will always trigger the kqueue event.
+/// Provides user-space fast path with kernel fallback for high-contention scenarios.
+/// Ideal for integration with event loops (Boost.Asio, Qt, libdispatch).
 ///
-/// After the event loop detects readability and `try_lock()` succeeds, call
-/// `consume_lock()` to drain the stale kqueue notification before releasing
-/// the waiter registration.  The helper `platform_try_acquire_after_wait()`
-/// in `async_support.hpp` does both steps (`try_lock()` + `consume_lock()`)
-/// automatically.
+/// To integrate with an event loop:
+///  1. Call `add_async_waiter()` before waiting on `native_handle()`.
+///  2. After `try_lock()` succeeds, call `consume_lock()`.
+///  3. Call `remove_async_waiter()` when done or on timeout.
+///
+/// Use `async_waiter_guard` for automatic lifetime management.
 ///
 /// Example
 /// -------
@@ -150,24 +146,13 @@ private:
 ///   mtx.add_async_waiter();  // Register before waiting on fd
 ///   // Wait on fd for events (via kevent/libdispatch/Qt/Asio/etc.)
 ///   if (mtx.try_lock()) {
-///       mtx.consume_lock();      // Drain stale NOTE_TRIGGER
+///       mtx.consume_lock();      // Drain kernel notification
 ///       mtx.remove_async_waiter();
 ///       // ... critical section ...
 ///       mtx.unlock();
 ///   } else {
 ///       // Spurious wakeup — re-arm the wait
 ///   }
-/// @endcode
-///
-/// Example
-/// -------
-/// @code
-///   fast_kqueue_mutex mtx;
-///   int fd = mtx.native_handle();
-///
-///   mtx.add_async_waiter();  // Register before waiting on fd
-///   // Wait on fd for events (via kevent/libdispatch/Qt/Asio/etc.)
-///   mtx.remove_async_waiter();  // Unregister when done
 /// @endcode
 ///
 class alignas( detail::hardware_destructive_interference_size ) fast_kqueue_mutex
@@ -271,9 +256,9 @@ public:
         return kqfd_;
     }
 
-    /// @brief Register an async waiter.
+    /// @brief Register an async waiter before polling the file descriptor.
     ///
-    /// Must be balanced by a call to `remove_async_waiter()`.
+    /// Must be paired with `remove_async_waiter()` or by consuming the lock after successful acquisition.
     uint32_t add_async_waiter() noexcept
     {
         return state_.fetch_add( 2u, std::memory_order_relaxed ) + 2u;
@@ -285,10 +270,10 @@ public:
         state_.fetch_sub( 2u, std::memory_order_relaxed );
     }
 
-    /// @brief Drain one pending kernel notification (if any) without blocking.
+    /// @brief Drain pending kernel notifications after acquiring the lock.
     ///
-    /// Must be called after acquiring the lock via user-space CAS while
-    /// registered as an async waiter.
+    /// Call this after `try_lock()` succeeds while registered as an async waiter.
+    /// Safe to call when no notifications are pending.
     void consume_lock() const noexcept;
 
 private:
