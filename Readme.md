@@ -104,31 +104,36 @@ std::unique_lock lock = fut.get(); // blocks until acquired; lock.owns_lock() ==
 Benchmarks for the mutex implementations (graphs are SVGs stored in the `benchmarks/` directory).
 The following results were recorded on Ubuntu 25.04 on an Intel i7-14700K.
 
-#### Linux (Ubuntu 25.04) — Intel i7-14700K
+#### Linux (Ubuntu 25.10) — Intel i7-14700K
 
 Single-threaded benchmark:
 
-![Linux single-threaded benchmark](benchmarks/linux_i7_14700k_nova_bench_single-threaded.svg)
+![Linux single-threaded benchmark](benchmarks/linux_intel_14700K_single-threaded.svg)
 
 Multi-threaded benchmark:
 
-![Linux multi-threaded benchmark](benchmarks/linux_i7_14700k_nova_bench_multi-threaded.svg)
+![Linux multi-threaded benchmark](benchmarks/linux_intel_14700K_multi-threaded.svg)
 
 #### macOS - Apple M4 Pro
 
 Single-threaded benchmark:
 
-![macOS single-threaded](benchmarks/macos_m4_nova_bench_single-threaded.svg)
+![macOS single-threaded](benchmarks/macos_m4_single-threaded.svg)
 
 Multi-threaded benchmark:
 
-![macOS multi-threaded](benchmarks/macos_m4_nova_bench_multi-threaded.svg)
+![macOS multi-threaded](benchmarks/macos_m4_multi-threaded.svg)
 
-#### Windows (placeholder)
+#### Windows 11 — Intel i7-14700K
 
-Add Windows benchmark images to `benchmarks/` and reference them here. Example:
+Single-threaded benchmark:
 
-`![Windows multi-threaded](benchmarks/windows_machine_multi-threaded.svg)`
+![Windows single-threaded benchmark](benchmarks/win32_intel_14700K_single-threaded.svg)
+
+Multi-threaded benchmark:
+
+![Windows multi-threaded benchmark](benchmarks/win32_intel_14700K_multi-threaded.svg)
+
 
 ## Event Types
 
