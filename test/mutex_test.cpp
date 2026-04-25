@@ -14,22 +14,21 @@
 #include <latch>
 #include <mutex>
 #include <thread>
-#include <type_traits>
 #include <vector>
 
 using namespace std::chrono_literals;
 
-TEMPLATE_TEST_CASE( "mutex implementations",
+// ---------------------------------------------------------------------------
+// Basic mutex tests — all types
+// ---------------------------------------------------------------------------
+
+TEMPLATE_TEST_CASE( "mutex: basic lock/unlock",
                     "[mutex]",
                     std::mutex,
                     std::timed_mutex,
                     std::recursive_mutex,
                     std::recursive_timed_mutex,
-                    nova::sync::fast_mutex,
-                    nova::sync::fair_mutex,
-                    nova::sync::spinlock_mutex,
-                    nova::sync::recursive_spinlock_mutex,
-                    nova::sync::shared_spinlock_mutex NOVA_SYNC_MUTEX_TEST_EXTRA_TYPES )
+                    NOVA_SYNC_ALL_MUTEX_TYPES )
 {
     using mutex_t = TestType;
 
@@ -105,194 +104,6 @@ TEMPLATE_TEST_CASE( "mutex implementations",
         REQUIRE( counter.load() == int( threads ) );
     }
 
-    // Tests specific to recursive_mutex types
-    if constexpr ( nova::sync::concepts::recursive_mutex< mutex_t > ) {
-        SECTION( "recursive try_lock in same thread" )
-        {
-            // First lock -> owned by this thread
-            m.lock();
-
-            // try_lock should succeed for the same owner and increment recursion
-            REQUIRE( m.try_lock() );
-
-            // Clean up: two unlocks to fully release
-            m.unlock();
-            m.unlock();
-        }
-
-        SECTION( "other thread cannot acquire while recursion > 1" )
-        {
-            std::atomic< int > counter { 0 };
-
-            // Acquire twice in this thread
-            m.lock();
-            m.lock();
-
-            // Worker will repeatedly try_lock until it succeeds
-            std::thread worker( [ & ] {
-                while ( !m.try_lock() )
-                    std::this_thread::yield();
-
-                ++counter; // mark that we entered
-                m.unlock();
-            } );
-
-            // Give worker time to attempt acquisition; it must not succeed while
-            // recursion_count_ > 1 (we still hold the lock twice)
-            std::this_thread::sleep_for( 50ms );
-            REQUIRE( counter.load() == 0 );
-
-            // Release one level: worker still must not acquire
-            m.unlock();
-            std::this_thread::sleep_for( 50ms );
-            REQUIRE( counter.load() == 0 );
-
-            // Final release: now worker can acquire
-            m.unlock();
-
-            worker.join();
-            REQUIRE( counter.load() == 1 );
-        }
-    }
-
-    if constexpr ( !nova::sync::concepts::recursive_mutex< mutex_t > ) {
-        SECTION( "non_recursive try_lock in same thread" )
-        {
-            // First lock -> owned by this thread
-            REQUIRE( m.try_lock() );
-            // try_lock should not succeed for the same owner
-            REQUIRE( !m.try_lock() );
-            m.unlock();
-        }
-    }
-
-    // Tests specific to shared_mutex types
-    if constexpr ( nova::sync::concepts::shared_mutex< mutex_t > ) {
-        SECTION( "shared locks allow concurrent readers" )
-        {
-            std::atomic< int > counter { 0 };
-
-            const unsigned threads    = std::max( 2u, std::thread::hardware_concurrency() );
-            const unsigned iterations = 2000u; // per-thread
-
-            std::vector< std::thread > ths;
-            ths.reserve( threads );
-
-            for ( unsigned t = 0; t < threads; ++t ) {
-                ths.emplace_back( [ & ] {
-                    for ( unsigned i = 0; i < iterations; ++i ) {
-                        m.lock_shared();
-                        ++counter;
-                        m.unlock_shared();
-                    }
-                } );
-            }
-
-            for ( auto& t : ths )
-                t.join();
-
-            REQUIRE( counter.load() == int( threads * iterations ) );
-        }
-
-        SECTION( "exclusive lock waits for active readers" )
-        {
-            std::atomic< int > counter { 0 };
-
-            // Acquire a shared lock in this thread so a writer will contend
-            m.lock_shared();
-
-            std::thread writer( [ & ] {
-                m.lock();
-                ++counter; // mark that writer acquired
-                m.unlock();
-            } );
-
-            // Give writer time to attempt acquisition; it must be blocked
-            std::this_thread::sleep_for( 50ms );
-            REQUIRE( counter.load() == 0 );
-
-            // Release the reader and let writer proceed
-            m.unlock_shared();
-            writer.join();
-            REQUIRE( counter.load() == 1 );
-        }
-
-        SECTION( "try_lock_shared fails while exclusive locked" )
-        {
-            m.lock();
-            REQUIRE( !m.try_lock_shared() );
-            m.unlock();
-        }
-
-        SECTION( "try_lock fails while shared locked" )
-        {
-            m.lock_shared();
-            REQUIRE( !m.try_lock() );
-            m.unlock_shared();
-        }
-    }
-
-    // Tests specific to the fair_mutex implementation
-    if constexpr ( std::is_same_v< mutex_t, nova::sync::fair_mutex > ) {
-        SECTION( "fairness: waiters acquire in FIFO order" )
-        {
-            const unsigned threads = std::min( 8u, std::max( 2u, std::thread::hardware_concurrency() ) );
-
-            // Hold the lock in this thread so workers will queue
-            m.lock();
-
-            std::vector< std::promise< void > > promises( threads );
-            std::vector< std::future< void > >  futures;
-            futures.reserve( threads );
-            for ( unsigned i = 0; i < threads; ++i )
-                futures.push_back( promises[ i ].get_future() );
-
-            std::vector< unsigned > acquire_order;
-            std::mutex              order_mtx;
-
-            std::vector< std::thread > ths;
-            ths.reserve( threads );
-
-            for ( unsigned t = 0; t < threads; ++t ) {
-                // move the future into the thread so it can wait on its release
-                ths.emplace_back( [ &, fut = std::move( futures[ t ] ), t ]() mutable {
-                    fut.wait();
-
-                    m.lock();
-
-                    {
-                        std::lock_guard< std::mutex > lk( order_mtx );
-                        acquire_order.push_back( t );
-                    }
-
-                    m.unlock();
-                } );
-            }
-
-            // Release threads to attempt acquisition in order
-            for ( unsigned t = 0; t < threads; ++t ) {
-                promises[ t ].set_value();
-                // give the thread a short moment to reach the contended path and get queued
-                std::this_thread::sleep_for( 20ms );
-            }
-
-            // While we still hold the lock, none should have acquired it
-            REQUIRE( acquire_order.empty() );
-
-            // Let them proceed one by one
-            m.unlock();
-
-            for ( auto& th : ths )
-                th.join();
-
-            REQUIRE( acquire_order.size() == threads );
-
-            // Ensure acquisition order matches the order we released the threads
-            for ( unsigned i = 0; i < threads; ++i )
-                REQUIRE( acquire_order[ i ] == i );
-        }
-    }
-
     SECTION( "stress test: many locks under contention" )
     {
         std::atomic< int > counter { 0 };
@@ -320,168 +131,411 @@ TEMPLATE_TEST_CASE( "mutex implementations",
 
         REQUIRE( counter.load() == int( threads * iterations ) );
     }
+}
 
-    // Tests specific to timed mutex types
-    if constexpr ( nova::sync::concepts::timed_mutex< mutex_t > ) {
-        SECTION( "try_lock_for succeeds when uncontended" )
-        {
-            REQUIRE( m.try_lock_for( 100ms ) );
-            m.unlock();
-        }
+// ---------------------------------------------------------------------------
+// try_lock tests — all annotated types, branched by recursive vs non-recursive
+// ---------------------------------------------------------------------------
+//
+// Rule (Clang Thread Safety Analysis §"No conditionally held locks"):
+//   Every path through a SECTION must either hold the lock on exit or not —
+//   never "maybe".  We use the `bool acquired; if (!acquired) return;` pattern
+//   to give the analyzer a single unconditional path after try_lock.
+//
+// Recursive types carry NOVA_SYNC_REENTRANT_CAPABILITY so the analyzer accepts
+// re-locking without a "mutex already held" diagnostic.
 
-        SECTION( "try_lock_for times out when locked" )
-        {
-            m.lock();
+TEMPLATE_TEST_CASE( "mutex: try_lock", "[mutex]", NOVA_SYNC_ALL_MUTEX_TYPES )
+{
+    using mutex_t = TestType;
+    mutex_t m;
 
-            bool        acquired = false;
-            std::thread other( [ & ] {
-                acquired = m.try_lock_for( 30ms );
-                if ( acquired )
-                    m.unlock();
-            } );
+    SECTION( "try_lock succeeds when uncontended" )
+    {
+        bool acquired = m.try_lock();
+        REQUIRE( acquired );
+        if ( !acquired )
+            return;
+        m.unlock();
+    }
 
-            other.join();
-            m.unlock();
-
-            REQUIRE( !acquired );
-        }
-
-        SECTION( "try_lock_until succeeds when uncontended" )
-        {
-            REQUIRE( m.try_lock_until( std::chrono::steady_clock::now() + 100ms ) );
-            m.unlock();
-        }
-
-        SECTION( "try_lock_until times out when locked" )
+    if constexpr ( !nova::sync::concepts::recursive_mutex< mutex_t > ) {
+        SECTION( "try_lock fails when already held by this thread (non-recursive)" )
         {
             m.lock();
-
-            bool        acquired = false;
-            std::thread other( [ & ] {
-                acquired = m.try_lock_until( std::chrono::steady_clock::now() + 30ms );
-                if ( acquired )
-                    m.unlock();
-            } );
-
-            other.join();
+            REQUIRE( !m.try_lock() );
             m.unlock();
+        }
+    }
 
-            REQUIRE( !acquired );
+    if constexpr ( nova::sync::concepts::recursive_mutex< mutex_t > ) {
+        SECTION( "try_lock succeeds when already held by this thread (re-entry)" )
+        {
+            // The analyzer cannot model recursive re-entry: TRY_ACQUIRE on an
+            // already-held mutex always warns even on reentrant types.
+            [ & ]() NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS {
+                m.lock();
+                bool acquired = m.try_lock();
+                REQUIRE( acquired );
+                m.unlock(); // release re-entry
+                m.unlock(); // release initial
+            }();
         }
 
-        // -----------------------------------------------------------------------
-        // Wakeup tests: verify that try_lock_for/try_lock_until wakes up correctly
-        // when the lock is released by another thread, not just by timeout.
-        //
-        // Thread A waits up to 10 s.  Thread B holds the lock for 5 s then
-        // releases it.  We expect:
-        //   • try_lock returns true (woken by B, not timed out)
-        //   • elapsed time is in [3 s, 9 s]  — well below the 10 s budget but
-        //     well above zero, with generous margins for slow/loaded cloud VMs.
-        // -----------------------------------------------------------------------
-        SECTION( "try_lock_for wakes up when lock is released (not timeout)" )
+        SECTION( "other thread cannot acquire while recursion > 1" )
         {
-            using clock = std::chrono::steady_clock;
+            std::atomic< int > counter { 0 };
 
-            // Pre-acquire so thread A will block immediately.
-            m.lock();
+            // Same limitation: double-lock requires suppression.
+            [ & ]() NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS {
+                m.lock();
+                m.lock();
 
-            std::latch started { 1 }; // signals when thread A is about to wait
-            bool       acquired_in_a = false;
-
-            std::thread a( [ & ] {
-                started.count_down();
-                auto t0       = clock::now();
-                acquired_in_a = m.try_lock_for( 10s );
-                auto elapsed  = clock::now() - t0;
-                // Validate timing inside the thread — Catch2 assertions are thread-safe
-                // for INFO/REQUIRE when run under a single test binary.
-                INFO( "elapsed = " << elapsed );
-                if ( acquired_in_a ) {
-                    REQUIRE( elapsed >= 3s );
-                    REQUIRE( elapsed < 9s );
+                // Worker spins on try_lock: exits the while only when lock is acquired.
+                std::thread worker( [ & ] {
+                    while ( !m.try_lock() )
+                        std::this_thread::yield();
+                    ++counter;
                     m.unlock();
-                }
-            } );
+                } );
 
-            // Give thread A time to enter the wait.
-            started.wait();
-            std::this_thread::sleep_for( 200ms ); // small extra margin
+                // Must not acquire while we hold the lock twice.
+                std::this_thread::sleep_for( 50ms );
+                REQUIRE( counter.load() == 0 );
 
-            // Thread B: hold 5 s, then release.
-            std::this_thread::sleep_for( 5s );
-            m.unlock();
+                // Release one level — worker still must not acquire.
+                m.unlock();
+                std::this_thread::sleep_for( 50ms );
+                REQUIRE( counter.load() == 0 );
 
-            a.join();
-            REQUIRE( acquired_in_a );
-        }
+                // Final release — now worker can acquire.
+                m.unlock();
 
-        SECTION( "try_lock_until (steady_clock) wakes up when lock is released (not timeout)" )
-        {
-            using clock = std::chrono::steady_clock;
-
-            m.lock();
-
-            std::latch started { 1 };
-            bool       acquired_in_a = false;
-
-            std::thread a( [ & ] {
-                started.count_down();
-                auto t0       = clock::now();
-                acquired_in_a = m.try_lock_until( t0 + 10s );
-                auto elapsed  = clock::now() - t0;
-                INFO( "elapsed = " << elapsed );
-                if ( acquired_in_a ) {
-                    REQUIRE( elapsed >= 3s );
-                    REQUIRE( elapsed < 9s );
-                    m.unlock();
-                }
-            } );
-
-            started.wait();
-            std::this_thread::sleep_for( 200ms );
-
-            std::this_thread::sleep_for( 5s );
-            m.unlock();
-
-            a.join();
-            REQUIRE( acquired_in_a );
-        }
-
-        SECTION( "try_lock_until (system_clock) wakes up when lock is released (not timeout)" )
-        {
-            using steady = std::chrono::steady_clock;
-            using system = std::chrono::system_clock;
-
-            m.lock();
-
-            std::latch started { 1 };
-            bool       acquired_in_a = false;
-
-            std::thread a( [ & ] {
-                started.count_down();
-                auto t0       = steady::now();
-                acquired_in_a = m.try_lock_until( system::now() + 10s );
-                auto elapsed  = steady::now() - t0;
-                INFO( "elapsed = " << elapsed );
-                if ( acquired_in_a ) {
-                    REQUIRE( elapsed >= 3s );
-                    REQUIRE( elapsed < 9s );
-                    m.unlock();
-                }
-            } );
-
-            started.wait();
-            std::this_thread::sleep_for( 200ms );
-
-            std::this_thread::sleep_for( 5s );
-            m.unlock();
-
-            a.join();
-            REQUIRE( acquired_in_a );
+                worker.join();
+                REQUIRE( counter.load() == 1 );
+            }();
         }
     }
 }
+
+
+// ---------------------------------------------------------------------------
+// Shared mutex tests
+// ---------------------------------------------------------------------------
+
+TEMPLATE_TEST_CASE( "mutex: shared locking", "[mutex]", NOVA_SYNC_SHARED_MUTEX_TYPES )
+{
+    using mutex_t = TestType;
+
+    mutex_t m;
+
+    SECTION( "shared locks allow concurrent readers" )
+    {
+        std::atomic< int > counter { 0 };
+
+        const unsigned threads    = std::max( 2u, std::thread::hardware_concurrency() );
+        const unsigned iterations = 2000u; // per-thread
+
+        std::vector< std::thread > ths;
+        ths.reserve( threads );
+
+        for ( unsigned t = 0; t < threads; ++t ) {
+            ths.emplace_back( [ & ] {
+                for ( unsigned i = 0; i < iterations; ++i ) {
+                    m.lock_shared();
+                    ++counter;
+                    m.unlock_shared();
+                }
+            } );
+        }
+
+        for ( auto& t : ths )
+            t.join();
+
+        REQUIRE( counter.load() == int( threads * iterations ) );
+    }
+
+    SECTION( "exclusive lock waits for active readers" )
+    {
+        std::atomic< int > counter { 0 };
+
+        // Acquire a shared lock in this thread so a writer will contend
+        m.lock_shared();
+
+        std::thread writer( [ & ] {
+            m.lock();
+            ++counter; // mark that writer acquired
+            m.unlock();
+        } );
+
+        // Give writer time to attempt acquisition; it must be blocked
+        std::this_thread::sleep_for( 50ms );
+        REQUIRE( counter.load() == 0 );
+
+        // Release the reader and let writer proceed
+        m.unlock_shared();
+        writer.join();
+        REQUIRE( counter.load() == 1 );
+    }
+
+    SECTION( "try_lock_shared fails while exclusive locked" )
+    {
+        m.lock();
+        REQUIRE( !m.try_lock_shared() );
+        m.unlock();
+    }
+
+    SECTION( "try_lock fails while shared locked" )
+    {
+        m.lock_shared();
+        REQUIRE( !m.try_lock() );
+        m.unlock_shared();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Fair mutex — FIFO ordering test
+// ---------------------------------------------------------------------------
+
+TEST_CASE( "mutex: fair_mutex FIFO ordering", "[mutex]" )
+{
+    nova::sync::fair_mutex m;
+
+    const unsigned threads = std::min( 8u, std::max( 2u, std::thread::hardware_concurrency() ) );
+
+    // Hold the lock in this thread so workers will queue
+    m.lock();
+
+    std::vector< std::promise< void > > promises( threads );
+    std::vector< std::future< void > >  futures;
+    futures.reserve( threads );
+    for ( unsigned i = 0; i < threads; ++i )
+        futures.push_back( promises[ i ].get_future() );
+
+    std::vector< unsigned > acquire_order;
+    std::mutex              order_mtx;
+
+    std::vector< std::thread > ths;
+    ths.reserve( threads );
+
+    for ( unsigned t = 0; t < threads; ++t ) {
+        ths.emplace_back( [ &, fut = std::move( futures[ t ] ), t ]() mutable {
+            fut.wait();
+
+            m.lock();
+
+            {
+                std::lock_guard< std::mutex > lk( order_mtx );
+                acquire_order.push_back( t );
+            }
+
+            m.unlock();
+        } );
+    }
+
+    // Release threads to attempt acquisition in order
+    for ( unsigned t = 0; t < threads; ++t ) {
+        promises[ t ].set_value();
+        // give the thread a short moment to reach the contended path and get queued
+        std::this_thread::sleep_for( 20ms );
+    }
+
+    // While we still hold the lock, none should have acquired it
+    REQUIRE( acquire_order.empty() );
+
+    // Let them proceed one by one
+    m.unlock();
+
+    for ( auto& th : ths )
+        th.join();
+
+    REQUIRE( acquire_order.size() == threads );
+
+    // Ensure acquisition order matches the order we released the threads
+    for ( unsigned i = 0; i < threads; ++i )
+        REQUIRE( acquire_order[ i ] == i );
+}
+
+// ---------------------------------------------------------------------------
+// Timed mutex tests — only for types that have try_lock_for / try_lock_until
+// ---------------------------------------------------------------------------
+
+#ifdef NOVA_SYNC_TIMED_MUTEX_TYPES
+
+TEMPLATE_TEST_CASE( "mutex: timed locking", "[mutex]", NOVA_SYNC_TIMED_MUTEX_TYPES )
+{
+    using mutex_t = TestType;
+
+    mutex_t m;
+
+    SECTION( "try_lock_for succeeds when uncontended" )
+    {
+        bool acquired = m.try_lock_for( 100ms );
+        REQUIRE( acquired );
+        if ( !acquired )
+            return;
+        m.unlock();
+    }
+
+    SECTION( "try_lock_for times out when locked" )
+    {
+        m.lock();
+
+        bool        acquired = false;
+        std::thread other( [ & ] {
+            if ( m.try_lock_for( 30ms ) ) {
+                acquired = true;
+                m.unlock();
+            }
+        } );
+
+        other.join();
+        m.unlock();
+
+        REQUIRE( !acquired );
+    }
+
+    SECTION( "try_lock_until succeeds when uncontended" )
+    {
+        bool acquired = m.try_lock_until( std::chrono::steady_clock::now() + 100ms );
+        REQUIRE( acquired );
+        if ( !acquired )
+            return;
+        m.unlock();
+    }
+
+    SECTION( "try_lock_until times out when locked" )
+    {
+        m.lock();
+
+        bool        acquired = false;
+        std::thread other( [ & ] {
+            if ( m.try_lock_until( std::chrono::steady_clock::now() + 30ms ) ) {
+                acquired = true;
+                m.unlock();
+            }
+        } );
+
+        other.join();
+        m.unlock();
+
+        REQUIRE( !acquired );
+    }
+
+    // -----------------------------------------------------------------------
+    // Wakeup tests: verify that try_lock_for/try_lock_until wakes up correctly
+    // when the lock is released by another thread, not just by timeout.
+    //
+    // Thread A waits up to 10 s.  Thread B holds the lock for 5 s then
+    // releases it.  We expect:
+    //   • try_lock returns true (woken by B, not timed out)
+    //   • elapsed time is in [3 s, 9 s]  — well below the 10 s budget but
+    //     well above zero, with generous margins for slow/loaded cloud VMs.
+    // -----------------------------------------------------------------------
+    SECTION( "try_lock_for wakes up when lock is released (not timeout)" )
+    {
+        using clock = std::chrono::steady_clock;
+
+        // Pre-acquire so thread A will block immediately.
+        m.lock();
+
+        std::latch started { 1 }; // signals when thread A is about to wait
+        bool       acquired_in_a = false;
+
+        std::thread a( [ & ] {
+            started.count_down();
+            auto t0 = clock::now();
+            // m.try_lock_for has NOVA_SYNC_TRY_ACQUIRE annotation so the analyzer
+            // knows the lock is conditionally acquired on true return.
+            if ( m.try_lock_for( 10s ) ) {
+                acquired_in_a = true;
+                auto elapsed  = clock::now() - t0;
+                INFO( "elapsed = " << elapsed );
+                REQUIRE( elapsed >= 3s );
+                REQUIRE( elapsed < 9s );
+                m.unlock();
+            }
+        } );
+
+        // Give thread A time to enter the wait.
+        started.wait();
+        std::this_thread::sleep_for( 200ms ); // small extra margin
+
+        // Thread B: hold 5 s, then release.
+        std::this_thread::sleep_for( 5s );
+        m.unlock();
+
+        a.join();
+        REQUIRE( acquired_in_a );
+    }
+
+    SECTION( "try_lock_until (steady_clock) wakes up when lock is released (not timeout)" )
+    {
+        using clock = std::chrono::steady_clock;
+
+        m.lock();
+
+        std::latch started { 1 };
+        bool       acquired_in_a = false;
+
+        std::thread a( [ & ] {
+            started.count_down();
+            auto t0 = clock::now();
+            if ( m.try_lock_until( t0 + 10s ) ) {
+                acquired_in_a = true;
+                auto elapsed  = clock::now() - t0;
+                INFO( "elapsed = " << elapsed );
+                REQUIRE( elapsed >= 3s );
+                REQUIRE( elapsed < 9s );
+                m.unlock();
+            }
+        } );
+
+        started.wait();
+        std::this_thread::sleep_for( 200ms );
+
+        std::this_thread::sleep_for( 5s );
+        m.unlock();
+
+        a.join();
+        REQUIRE( acquired_in_a );
+    }
+
+    SECTION( "try_lock_until (system_clock) wakes up when lock is released (not timeout)" )
+    {
+        using steady = std::chrono::steady_clock;
+        using system = std::chrono::system_clock;
+
+        m.lock();
+
+        std::latch started { 1 };
+        bool       acquired_in_a = false;
+
+        std::thread a( [ & ] {
+            started.count_down();
+            auto t0 = steady::now();
+            if ( m.try_lock_until( system::now() + 10s ) ) {
+                acquired_in_a = true;
+                auto elapsed  = steady::now() - t0;
+                INFO( "elapsed = " << elapsed );
+                REQUIRE( elapsed >= 3s );
+                REQUIRE( elapsed < 9s );
+                m.unlock();
+            }
+        } );
+
+        started.wait();
+        std::this_thread::sleep_for( 200ms );
+
+        std::this_thread::sleep_for( 5s );
+        m.unlock();
+
+        a.join();
+        REQUIRE( acquired_in_a );
+    }
+}
+
+#endif // NOVA_SYNC_TIMED_MUTEX_TYPES
 
 #ifdef NOVA_SYNC_HAS_PTHREAD_RT_MUTEX
 
@@ -616,42 +670,48 @@ TEMPLATE_TEST_CASE( "async_waiter_guard: try_acquire succeeds when lock is free"
                     "[async_waiter_guard]",
                     NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
-    // Verify that try_acquire() on an unlocked mutex:
-    //   (a) returns true
-    //   (b) the guard is no longer active (remove_async_waiter not double-called)
-    //   (c) the lock is held after (unlock does not crash)
-    TestType mtx;
+    // try_acquire() transfers lock ownership through a reference member (mtx_).
+    // The analyzer cannot match guard.mtx_ to the caller's mtx variable, so
+    // suppression is required here — this is a genuine analyzer limitation.
+    [ & ]() NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS {
+        TestType mtx;
 
-    nova::sync::detail::async_waiter_guard< TestType > guard( mtx );
-    REQUIRE( guard.active() );
+        nova::sync::detail::async_waiter_guard< TestType > guard( mtx );
+        REQUIRE( guard.active() );
 
-    bool acquired = guard.try_acquire();
-    REQUIRE( acquired );
-    REQUIRE_FALSE( guard.active() ); // released internally by try_acquire
-
-    // Lock is owned — unlock should succeed cleanly
-    mtx.unlock();
+        bool acquired = guard.try_acquire();
+        REQUIRE( acquired );
+        REQUIRE_FALSE( guard.active() ); // released internally by try_acquire
+        mtx.unlock();
+    }();
 }
 
 TEMPLATE_TEST_CASE( "async_waiter_guard: try_acquire returns false when locked",
                     "[async_waiter_guard]",
                     NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
-    TestType mtx;
-    mtx.lock(); // held — try_acquire must fail
+    // Same limitation as above.
+    [ & ]() NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS {
+        TestType mtx;
+        mtx.lock();
 
-    {
-        nova::sync::detail::async_waiter_guard< TestType > guard( mtx );
-        REQUIRE( guard.active() );
+        {
+            nova::sync::detail::async_waiter_guard< TestType > guard( mtx );
+            REQUIRE( guard.active() );
 
-        bool acquired = guard.try_acquire();
-        REQUIRE_FALSE( acquired );
-        REQUIRE( guard.active() ); // still registered; will release on destruction
-    } // guard destroyed here — remove_async_waiter called
+            bool acquired = guard.try_acquire();
+            REQUIRE_FALSE( acquired );
+            REQUIRE( guard.active() );
+        }
 
-    mtx.unlock();
-    REQUIRE( mtx.try_lock() ); // mutex is free again
-    mtx.unlock();
+        mtx.unlock();
+
+        bool ok = mtx.try_lock();
+        REQUIRE( ok );
+        if ( !ok )
+            return;
+        mtx.unlock();
+    }();
 }
 
 TEMPLATE_TEST_CASE( "async_waiter_guard: release is idempotent", "[async_waiter_guard]", NOVA_SYNC_ASYNC_MUTEX_TYPES )
@@ -690,7 +750,10 @@ TEMPLATE_TEST_CASE( "async_waiter_guard: adopt constructor does not double-regis
 
         // If waiter count is balanced, try_lock should now work and unlock()
         // should not post a spurious kernel notification.
-        REQUIRE( mtx.try_lock() );
+        bool ok = mtx.try_lock();
+        REQUIRE( ok );
+        if ( !ok )
+            return;
         mtx.unlock();
     }
 }
@@ -699,25 +762,25 @@ TEMPLATE_TEST_CASE( "async_waiter_guard: no stray notification after try_acquire
                     "[async_waiter_guard]",
                     NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
-    // After a sequence of lock/try_acquire/unlock cycles, the mutex must have
-    // no pending kernel notification (i.e. try_lock() succeeds immediately and
-    // a second try_lock() fails — confirming exactly one token).
-    TestType mtx;
+    // try_acquire() lock-identity limitation — see "try_acquire succeeds" above.
+    [ & ]() NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS {
+        TestType mtx;
 
-    const int rounds = 50;
-    for ( int i = 0; i < rounds; ++i ) {
-        nova::sync::detail::async_waiter_guard< TestType > guard( mtx );
-        bool                                               acquired = guard.try_acquire();
-        REQUIRE( acquired );
-        // Lock is held, guard released
+        const int rounds = 50;
+        for ( int i = 0; i < rounds; ++i ) {
+            nova::sync::detail::async_waiter_guard< TestType > guard( mtx );
+            bool                                               acquired = guard.try_acquire();
+            REQUIRE( acquired );
+            mtx.unlock();
+        }
+
+        bool ok = mtx.try_lock();
+        REQUIRE( ok );
+        if ( !ok )
+            return;
+        REQUIRE_FALSE( mtx.try_lock() );
         mtx.unlock();
-    }
-
-    // After all cycles: try_lock must succeed (mutex is free, no stale notification)
-    REQUIRE( mtx.try_lock() );
-    // Second try_lock must fail (only one token)
-    REQUIRE_FALSE( mtx.try_lock() );
-    mtx.unlock();
+    }();
 }
 
 #endif // NOVA_SYNC_ASYNC_MUTEX_TYPES

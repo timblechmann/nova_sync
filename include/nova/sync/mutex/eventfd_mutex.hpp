@@ -14,6 +14,7 @@
 #    include <nova/sync/detail/backoff.hpp>
 #    include <nova/sync/detail/compat.hpp>
 #    include <nova/sync/detail/timed_wait.hpp>
+#    include <nova/sync/mutex/annotations.hpp>
 #    include <nova/sync/mutex/support/async_waiter_guard.hpp>
 
 namespace nova::sync {
@@ -43,7 +44,7 @@ namespace nova::sync {
 ///   }
 /// @endcode
 ///
-class eventfd_mutex
+class NOVA_SYNC_CAPABILITY( "mutex" ) eventfd_mutex
 {
 public:
     /// @brief The native handle type — a POSIX file descriptor.
@@ -58,18 +59,18 @@ public:
     eventfd_mutex& operator=( const eventfd_mutex& ) = delete;
 
     /// @brief Acquires the lock, blocking as necessary.
-    void lock() noexcept;
+    void lock() noexcept NOVA_SYNC_ACQUIRE();
 
     /// @brief Attempts to acquire the lock without blocking.
     /// @return `true` if lock acquired, `false` if already locked.
-    [[nodiscard]] bool try_lock() noexcept;
+    [[nodiscard]] bool try_lock() noexcept NOVA_SYNC_TRY_ACQUIRE( true );
 
     /// @brief Attempts to acquire the lock, blocking for up to @p rel_ns nanoseconds.
     ///
     /// Single ppoll call per attempt — no calls to now().
     ///
     /// @return `true` if the lock was acquired, `false` if the duration expired.
-    bool try_lock_for( duration_type rel_ns ) noexcept
+    bool try_lock_for( duration_type rel_ns ) noexcept NOVA_SYNC_TRY_ACQUIRE( true )
     {
         if ( rel_ns.count() <= 0 )
             return try_lock();
@@ -86,7 +87,7 @@ public:
     ///
     /// @return `true` if the lock was acquired, `false` if the duration expired.
     template < class Rep, class Period >
-    bool try_lock_for( const std::chrono::duration< Rep, Period >& rel_time )
+    bool try_lock_for( const std::chrono::duration< Rep, Period >& rel_time ) NOVA_SYNC_TRY_ACQUIRE( true )
     {
         return try_lock_for( std::chrono::duration_cast< duration_type >( rel_time ) );
     }
@@ -100,7 +101,7 @@ public:
     ///
     /// @return `true` if the lock was acquired, `false` if the deadline expired.
     template < class Clock, class Duration >
-    bool try_lock_until( const std::chrono::time_point< Clock, Duration >& abs_time )
+    bool try_lock_until( const std::chrono::time_point< Clock, Duration >& abs_time ) NOVA_SYNC_TRY_ACQUIRE( true )
     {
         if ( try_lock() )
             return true;
@@ -120,7 +121,7 @@ public:
     }
 
     /// @brief Releases the lock and wakes one waiting thread if any.
-    void unlock() noexcept;
+    void unlock() noexcept NOVA_SYNC_RELEASE();
 
     /// @brief Returns the eventfd file descriptor for async integration.
     ///
@@ -149,7 +150,7 @@ private:
 ///
 /// Use `async_waiter_guard` for automatic lifetime management.
 ///
-class alignas( detail::hardware_destructive_interference_size ) fast_eventfd_mutex
+class alignas( detail::hardware_destructive_interference_size ) NOVA_SYNC_CAPABILITY( "mutex" ) fast_eventfd_mutex
 {
 public:
     /// @brief The native handle type — a POSIX file descriptor.
@@ -163,7 +164,7 @@ public:
     fast_eventfd_mutex& operator=( const fast_eventfd_mutex& ) = delete;
 
     /// @brief Acquires the lock, blocking as necessary.
-    void lock() noexcept
+    void lock() noexcept NOVA_SYNC_ACQUIRE()
     {
         uint32_t expected = 0;
         if ( state_.compare_exchange_weak( expected, 1u, std::memory_order_acquire, std::memory_order_relaxed ) )
@@ -173,7 +174,7 @@ public:
 
     /// @brief Attempts to acquire the lock without blocking.
     /// @return `true` if lock acquired, `false` if already locked.
-    [[nodiscard]] bool try_lock() noexcept
+    [[nodiscard]] bool try_lock() noexcept NOVA_SYNC_TRY_ACQUIRE( true )
     {
         uint32_t s = state_.load( std::memory_order_relaxed );
         while ( ( s & 1u ) == 0 ) {
@@ -184,7 +185,7 @@ public:
     }
 
     /// @brief Releases the lock and wakes one waiting thread if any.
-    void unlock() noexcept;
+    void unlock() noexcept NOVA_SYNC_RELEASE();
 
     /// @brief Attempts to acquire the lock, blocking for up to @p rel_time.
     ///
@@ -271,9 +272,8 @@ public:
     {
         return state_.fetch_add( 2u, std::memory_order_relaxed ) + 2u;
     }
-
     /// @brief Unregister a previously added async waiter.
-    void remove_async_waiter() noexcept
+    void remove_async_waiter() noexcept NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS
     {
         state_.fetch_sub( 2u, std::memory_order_relaxed );
     }
@@ -282,7 +282,7 @@ public:
     ///
     /// Call this after `try_lock()` succeeds while registered as an async waiter.
     /// Safe to call when no notifications are pending.
-    void consume_lock() const noexcept;
+    void consume_lock() const noexcept NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS;
 
 private:
     std::atomic< uint32_t > state_ { 0 }; // Bit 0: locked; Bits 1-31: waiter count

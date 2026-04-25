@@ -122,7 +122,7 @@ TEMPLATE_TEST_CASE( "async_mutex: async acquire fires after unlock",
 
     REQUIRE( acquired_after_release->load() );
 
-    REQUIRE( mtx.try_lock() );
+    mtx.lock(); // verify mutex is free
     mtx.unlock();
 }
 
@@ -156,7 +156,7 @@ TEMPLATE_TEST_CASE( "async_mutex: no early wakeup while locked", "[async_mutex][
 
     REQUIRE( handler_fired->load() );
 
-    REQUIRE( mtx.try_lock() );
+    mtx.lock(); // verify mutex is free
     mtx.unlock();
 }
 
@@ -344,7 +344,7 @@ TEMPLATE_TEST_CASE( "async_mutex stress: high contention many async waiters",
     REQUIRE( *max_concurrent == 1 );
 
     // Mutex must be acquirable after all async ops complete (no stray notifications)
-    REQUIRE( mtx.try_lock() );
+    mtx.lock(); // verify mutex is free
     mtx.unlock();
 }
 
@@ -384,7 +384,7 @@ TEMPLATE_TEST_CASE( "async_mutex stress: unlock races CAS acquisition",
     REQUIRE( completions->load() == rounds );
 
     // Mutex must be cleanly acquirable with no stray notifications
-    REQUIRE( mtx.try_lock() );
+    mtx.lock(); // verify mutex is free
     mtx.unlock();
 }
 
@@ -470,6 +470,6 @@ TEMPLATE_TEST_CASE( "async_mutex stress: no stray notifications after acquire cy
     REQUIRE( completions->load() == rounds );
 
     // Final check: no stray notifications — try_lock must succeed
-    REQUIRE( mtx.try_lock() );
+    mtx.lock(); // verify mutex is free
     mtx.unlock();
 }

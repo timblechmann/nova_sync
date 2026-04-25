@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <nova/sync/detail/compat.hpp>
+#include <nova/sync/mutex/annotations.hpp>
 
 #if defined( _WIN32 )
 #    define NOVA_SYNC_HAS_WIN32_SRW_MUTEX 1
@@ -17,7 +17,7 @@ namespace nova::sync {
 
 /// @brief Ultra-lightweight non-recursive, non-fair mutex using Win32 SRW lock.
 ///
-class win32_srw_mutex
+class NOVA_SYNC_CAPABILITY( "mutex" ) win32_srw_mutex
 {
 public:
     /// @brief Initialises the SRW lock.
@@ -29,13 +29,13 @@ public:
     win32_srw_mutex& operator=( const win32_srw_mutex& ) = delete;
 
     /// @brief Acquires the lock in exclusive mode.
-    void lock() noexcept;
+    void lock() noexcept NOVA_SYNC_ACQUIRE();
 
     /// @brief Attempts to acquire in exclusive mode without blocking.
-    [[nodiscard]] bool try_lock() noexcept;
+    [[nodiscard]] bool try_lock() noexcept NOVA_SYNC_TRY_ACQUIRE( true );
 
     /// @brief Releases from exclusive mode.
-    void unlock() noexcept;
+    void unlock() noexcept NOVA_SYNC_RELEASE();
 
 private:
     // SRWLOCK is pointer-sized (RTL_SRWLOCK internally); store as void*

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <nova/sync/mutex/annotations.hpp>
 #include <nova/sync/mutex/concepts.hpp>
 
 namespace nova::sync::detail {
@@ -82,7 +83,12 @@ public:
     /// @brief Attempts to acquire the lock and release the guard atomically.
     ///
     /// @return `true` if lock was acquired and guard released; `false` otherwise.
-    [[nodiscard]] bool try_acquire() noexcept
+    ///
+    /// @note Marked no_thread_safety_analysis because the analyzer cannot model
+    ///       the conditional lock transfer: the mutex is acquired inside this
+    ///       function but "given" to the caller on success, while on failure the
+    ///       guard retains the waiter registration and no lock is held.
+    [[nodiscard]] NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS bool try_acquire() noexcept
     {
         if ( !mtx_.try_lock() )
             return false;

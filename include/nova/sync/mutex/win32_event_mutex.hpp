@@ -12,15 +12,15 @@
 
 #    include <atomic>
 #    include <chrono>
-#    include <nova/sync/detail/compat.hpp>
 #    include <nova/sync/detail/timed_wait.hpp>
+#    include <nova/sync/mutex/annotations.hpp>
 
 typedef void* HANDLE;
 
 namespace nova::sync {
 
 /// @brief Async-capable mutex using Win32 synchronization primitives.
-class win32_event_mutex
+class NOVA_SYNC_CAPABILITY( "mutex" ) win32_event_mutex
 {
 public:
     /// @brief The native handle type — a Win32 HANDLE.
@@ -35,18 +35,18 @@ public:
     win32_event_mutex& operator=( const win32_event_mutex& ) = delete;
 
     /// @brief Acquires the lock, blocking as necessary.
-    void lock() noexcept;
+    void lock() noexcept NOVA_SYNC_ACQUIRE();
 
     /// @brief Attempts to acquire the lock without blocking.
     /// @return `true` if lock acquired, `false` if already locked.
-    [[nodiscard]] bool try_lock() noexcept;
+    [[nodiscard]] bool try_lock() noexcept NOVA_SYNC_TRY_ACQUIRE( true );
 
     /// @brief Attempts to acquire the lock, blocking for up to @p rel_ms milliseconds.
     ///
     /// Single WaitForSingleObject call per attempt — no calls to now().
     ///
     /// @return `true` if the lock was acquired, `false` if the duration expired.
-    bool try_lock_for( duration_type rel_ms ) noexcept
+    bool try_lock_for( duration_type rel_ms ) noexcept NOVA_SYNC_TRY_ACQUIRE( true )
     {
         if ( rel_ms.count() <= 0 )
             return try_lock();
@@ -63,7 +63,7 @@ public:
     ///
     /// @return `true` if the lock was acquired, `false` if the duration expired.
     template < class Rep, class Period >
-    bool try_lock_for( const std::chrono::duration< Rep, Period >& rel_time )
+    bool try_lock_for( const std::chrono::duration< Rep, Period >& rel_time ) NOVA_SYNC_TRY_ACQUIRE( true )
     {
         // Ceiling-round to milliseconds so we never under-wait.
         auto                ns        = std::chrono::duration_cast< std::chrono::nanoseconds >( rel_time );
@@ -80,7 +80,7 @@ public:
     ///
     /// @return `true` if the lock was acquired, `false` if the deadline expired.
     template < class Clock, class Duration >
-    bool try_lock_until( const std::chrono::time_point< Clock, Duration >& abs_time )
+    bool try_lock_until( const std::chrono::time_point< Clock, Duration >& abs_time ) NOVA_SYNC_TRY_ACQUIRE( true )
     {
         return try_lock_until_impl( abs_time,
                                     std::is_same< Clock, std::chrono::system_clock > {},
@@ -134,7 +134,7 @@ private:
 
 public:
     /// @brief Releases the lock and wakes one waiting thread if any.
-    void unlock() noexcept;
+    void unlock() noexcept NOVA_SYNC_RELEASE();
 
     /// @brief Returns the Semaphore HANDLE for async integration.
     ///
@@ -147,13 +147,13 @@ public:
     }
 
     /// @brief Register an async waiter before waiting on the native handle.
-    void add_async_waiter() noexcept
+    void add_async_waiter() noexcept NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS
     {
         state_.fetch_add( 2u, std::memory_order_relaxed );
     }
 
     /// @brief Unregister a previously added async waiter.
-    void remove_async_waiter() noexcept
+    void remove_async_waiter() noexcept NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS
     {
         state_.fetch_sub( 2u, std::memory_order_relaxed );
     }
@@ -162,7 +162,7 @@ public:
     ///
     /// Call this after successfully acquiring the lock while registered as an async waiter.
     /// Safe to call when no notifications are pending.
-    void consume_lock() const noexcept;
+    void consume_lock() const noexcept NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS;
 
 private:
     HANDLE                  handle_ { nullptr };

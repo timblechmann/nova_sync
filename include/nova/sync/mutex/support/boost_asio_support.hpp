@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <nova/sync/mutex/annotations.hpp>
 #include <nova/sync/mutex/concepts.hpp>
 #include <nova/sync/mutex/detail/async_support.hpp>
 
@@ -227,6 +228,7 @@ struct async_acquire_future_state
 template < typename Mutex >
 async_acquire_future_state< Mutex > async_acquire( boost::asio::io_context& ioc, Mutex& mtx )
     requires concepts::native_async_mutex< Mutex >
+NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS
 {
     using promise_t = std::promise< std::unique_lock< Mutex > >;
 
@@ -354,7 +356,7 @@ async_acquire_future_state< Mutex > async_acquire( boost::asio::io_context& ioc,
 ///       });
 /// @endcode
 template < typename Mutex, typename Handler >
-void async_acquire( boost::asio::io_context& ioc, Mutex& mtx, Handler&& handler )
+NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS void async_acquire( boost::asio::io_context& ioc, Mutex& mtx, Handler&& handler )
     requires detail::invocable_with_expected< Handler, Mutex > && concepts::native_async_mutex< Mutex >
 {
     if ( mtx.try_lock() ) {
@@ -408,7 +410,8 @@ void async_acquire( boost::asio::io_context& ioc, Mutex& mtx, Handler&& handler 
 ///   } // Handle destroyed here — operation automatically cancelled if still pending
 /// @endcode
 template < typename Mutex, typename Handler >
-auto async_acquire_cancellable( boost::asio::io_context& ioc, Mutex& mtx, Handler&& handler )
+NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS auto
+async_acquire_cancellable( boost::asio::io_context& ioc, Mutex& mtx, Handler&& handler )
     -> boost_asio_acquire_handle< Mutex, Handler >
     requires detail::invocable_with_expected< Handler, Mutex > && concepts::native_async_mutex< Mutex >
 {
