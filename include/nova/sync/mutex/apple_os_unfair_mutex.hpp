@@ -34,7 +34,7 @@ public:
     }
 
     /// @brief Attempts to acquire the lock without blocking.
-    bool try_lock() noexcept
+    [[nodiscard]] bool try_lock() noexcept
     {
         return os_unfair_lock_trylock( &lock_ );
     }

@@ -36,7 +36,7 @@ public:
     /// @brief Attempts to acquire the lock without blocking.
     /// @return `true` if the lock was acquired (including recursive re-entry),
     ///         `false` if another thread currently holds it.
-    bool try_lock() noexcept;
+    [[nodiscard]] bool try_lock() noexcept;
 
     /// @brief Releases one level of recursion; fully unlocks when count reaches zero.
     void unlock() noexcept;

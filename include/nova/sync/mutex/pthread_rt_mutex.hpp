@@ -103,7 +103,7 @@ public:
 
     /// @brief Attempts to acquire the lock without blocking.
     /// @return `true` if acquired, `false` if already locked.
-    bool try_lock() noexcept
+    [[nodiscard]] bool try_lock() noexcept
     {
         return pthread_mutex_trylock( &mutex_ ) == 0;
     }

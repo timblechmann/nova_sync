@@ -31,7 +31,7 @@ public:
 
     /// @brief Attempts to acquire the lock without blocking.
     /// @return `true` if lock acquired, `false` if already locked.
-    inline bool try_lock() noexcept
+    [[nodiscard]] inline bool try_lock() noexcept
     {
         uint32_t expected = 0;
         return state_.compare_exchange_strong( expected, 1, std::memory_order_acquire, std::memory_order_relaxed );

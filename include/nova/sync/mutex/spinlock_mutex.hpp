@@ -33,7 +33,7 @@ public:
 
     /// @brief Tries to acquire the lock without spinning.
     /// @return true if the lock was successfully acquired, false otherwise.
-    bool try_lock() noexcept
+    [[nodiscard]] bool try_lock() noexcept
     {
         if ( locked_.load( std::memory_order_relaxed ) )
             return false;

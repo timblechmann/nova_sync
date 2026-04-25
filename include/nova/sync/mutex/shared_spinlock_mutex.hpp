@@ -41,7 +41,7 @@ public:
 
     /// @brief Attempts to acquire the exclusive write lock without blocking.
     /// @return `true` if lock acquired, `false` if already locked or readers present.
-    bool try_lock() noexcept
+    [[nodiscard]] bool try_lock() noexcept
     {
         uint32_t expected = state_.load( std::memory_order_relaxed );
 

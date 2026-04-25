@@ -32,7 +32,7 @@ public:
     void lock() noexcept;
 
     /// @brief Attempts to acquire in exclusive mode without blocking.
-    bool try_lock() noexcept;
+    [[nodiscard]] bool try_lock() noexcept;
 
     /// @brief Releases from exclusive mode.
     void unlock() noexcept;
