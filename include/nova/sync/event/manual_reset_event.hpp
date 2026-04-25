@@ -11,9 +11,8 @@ namespace nova::sync {
 
 /// @brief Manual-reset event.
 ///
-/// The event starts in the "not set" state. Once signal() is called every
-/// thread currently blocked in wait() is woken and every subsequent call to
-/// wait() / try_wait() returns immediately — until reset() is called.
+/// Once `signal()` is called, all waiters are woken and subsequent `wait()` /
+/// `try_wait()` calls return immediately until `reset()` is called.
 
 class manual_reset_event
 {
@@ -28,8 +27,6 @@ public:
     manual_reset_event& operator=( const manual_reset_event& ) = delete;
 
     /// @brief Transitions the event to "set", waking all waiters.
-    ///
-    /// Idempotent: calling signal() on an already-set event is a no-op.
     void signal() noexcept
     {
         if ( state_.exchange( 1u, std::memory_order_release ) == 0u )

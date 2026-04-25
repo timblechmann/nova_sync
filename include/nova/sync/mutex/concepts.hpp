@@ -100,24 +100,10 @@ concept native_async_mutex = mutex< M > && requires( M& m ) {
     { std::as_const( m ).native_handle() } -> std::same_as< typename M::native_handle_type >;
 };
 
-/// @brief Refines `native_async_mutex` with a user-space waiter count.
+/// @brief Refines `native_async_mutex` with async waiter registration.
 ///
-/// Types satisfying this concept expose `add_async_waiter()` and
-/// `remove_async_waiter()` so that async integration layers can register
-/// themselves in the waiter count.  This allows `unlock()` to skip the
-/// kernel signal on the uncontended fast path while still notifying the
-/// OS primitive when at least one async waiter is registered.
-///
-/// They also expose `consume_lock()` which drains a pending kernel
-/// notification without blocking.  This must be called after acquiring
-/// the lock via user-space CAS while registered as a waiter, because
-/// `unlock()` may have already posted the notification (it saw waiters > 0)
-/// before the CAS grabbed ownership.  Without draining, the stale
-/// notification would cause spurious wakeups (or busy-loops in event-loop
-/// integrations) for subsequent waiters.
-///
-/// Modelled by: `fast_eventfd_mutex` (Linux), `fast_kqueue_mutex` (Apple),
-///              `win32_event_mutex` (Windows).
+/// Types satisfying this concept expose `add_async_waiter()`,
+/// `remove_async_waiter()`, and `consume_lock()` for event-loop integration.
 template < typename M >
 concept async_waiter_mutex = native_async_mutex< M > && requires( M& m ) {
     { m.add_async_waiter() };

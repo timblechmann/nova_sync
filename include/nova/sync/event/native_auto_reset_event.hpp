@@ -14,13 +14,11 @@
 
 namespace nova::sync {
 
-/// @brief Auto-reset event based on OS primitives.
+/// @brief Auto-reset event backed by OS primitives (`eventfd`, `kqueue`, Win32 event).
 ///
-/// Maps directly to OS-specific synchronization primitives (e.g. eventfd on Linux, kqueue on macOS, SetEvent on Windows).
-/// The event starts in the "not set" state. signal() delivers exactly one
-/// token: if a thread is already blocked in wait(), it is woken and the
-/// token is consumed atomically. If no thread is waiting the token is
-/// stored and consumed by the next call to wait() or try_wait().
+/// Each `signal()` delivers exactly one token. If a thread is blocked in
+/// `wait()`, it is woken and the token is consumed. Otherwise the token is
+/// stored for the next `wait()` / `try_wait()` call.
 class native_auto_reset_event
 {
 public:
@@ -48,19 +46,11 @@ public:
     native_auto_reset_event& operator=( const native_auto_reset_event& ) = delete;
 
 #if defined( _WIN32 ) || defined( __APPLE__ )
-    /// @brief Returns the underlying OS native handle.
-    ///
-    /// This handle can be used to wait for the event via an event loop,
-    /// enabling integration with C++20 coroutines or C++26 executors.
-    ///
-    /// @return The native handle (file descriptor or HANDLE).
+    /// @brief Returns the underlying OS native handle for event-loop integration.
     native_handle_type native_handle() const noexcept;
 #endif
 
     /// @brief Delivers one token, waking exactly one waiter.
-    ///
-    /// Idempotent when already set: a second signal() without an intervening
-    /// wait() is discarded.
     void signal() noexcept;
 
     /// @brief Atomically consumes a token if one is pending.

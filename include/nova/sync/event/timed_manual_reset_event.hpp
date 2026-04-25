@@ -13,11 +13,10 @@
 
 namespace nova::sync {
 
-/// @brief Manual-reset event with timed-wait support and a lockfree signal().
+/// @brief Manual-reset event with timed-wait support.
 ///
-/// The event starts in the "not set" state. Once signal() is called every
-/// thread currently blocked in wait() is woken and every subsequent call to
-/// wait() / try_wait() returns immediately — until reset() is called.
+/// Once `signal()` is called, all waiters are woken and subsequent `wait()` /
+/// `try_wait()` calls return immediately until `reset()` is called.
 
 class timed_manual_reset_event
 {
@@ -41,9 +40,7 @@ public:
     // -----------------------------------------------------------------------
     // Signalling
 
-    /// @brief Transitions the event to "set", waking all waiters.  Lockfree.
-    ///
-    /// Idempotent: calling signal() on an already-set event is a no-op.
+    /// @brief Transitions the event to "set", waking all waiters.
     void signal() noexcept
     {
         const uint32_t prev = state_.fetch_or( flag_bit, std::memory_order_release );

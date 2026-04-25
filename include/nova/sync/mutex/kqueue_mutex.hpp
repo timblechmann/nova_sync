@@ -21,25 +21,6 @@ namespace nova::sync {
 
 /// @brief Simple async-capable mutex implemented via Apple `kqueue` with `EVFILT_USER`.
 ///
-/// Example (Simple Kevent Loop)
-/// ----------------------------
-/// @code
-///   kqueue_mutex mtx;
-///   int fd = mtx.native_handle();
-///
-///   // No waiter registration needed
-///   while (true) {
-///       if (mtx.try_lock()) {
-///           // Critical section
-///           mtx.unlock();
-///           break;
-///       }
-///       // Wait for fd readability (via poll)
-///       poll(..., fd, POLLIN, ...);
-///       // Spurious wakeups possible; will retry try_lock
-///   }
-/// @endcode
-///
 class NOVA_SYNC_CAPABILITY( "mutex" ) kqueue_mutex
 {
 public:
@@ -71,8 +52,6 @@ public:
         while ( !try_lock() ) {
             if ( !detail::kevent_for( kqfd_, rel_ns ) )
                 return try_lock(); // one last attempt after timeout
-            // Event fired - kevent_for's kevent call consumed the event (EV_CLEAR cleared it).
-            // This consumption represents the lock acquisition, so return true.
             return true;
         }
         return true;
@@ -112,10 +91,6 @@ public:
     void unlock() noexcept NOVA_SYNC_RELEASE();
 
     /// @brief Returns the kqueue file descriptor for async integration.
-    ///
-    /// When waiting on this file descriptor, it becomes readable when the mutex is unlocked.
-    /// The caller can then attempt to acquire the lock (e.g. via `try_lock()`) and, if
-    /// unsuccessful, re-register for notifications.
     [[nodiscard]] native_handle_type native_handle() const noexcept
     {
         return kqfd_;
@@ -126,35 +101,7 @@ private:
 };
 
 
-/// @brief Fast async-capable mutex optimized for event loop integration.
-///
-/// Provides user-space fast path with kernel fallback for high-contention scenarios.
-/// Ideal for integration with event loops (Boost.Asio, Qt, libdispatch).
-///
-/// To integrate with an event loop:
-///  1. Call `add_async_waiter()` before waiting on `native_handle()`.
-///  2. After `try_lock()` succeeds, call `consume_lock()`.
-///  3. Call `remove_async_waiter()` when done or on timeout.
-///
-/// Use `async_waiter_guard` for automatic lifetime management.
-///
-/// Example
-/// -------
-/// @code
-///   fast_kqueue_mutex mtx;
-///   int fd = mtx.native_handle();
-///
-///   mtx.add_async_waiter();  // Register before waiting on fd
-///   // Wait on fd for events (via kevent/libdispatch/Qt/Asio/etc.)
-///   if (mtx.try_lock()) {
-///       mtx.consume_lock();      // Drain kernel notification
-///       mtx.remove_async_waiter();
-///       // ... critical section ...
-///       mtx.unlock();
-///   } else {
-///       // Spurious wakeup — re-arm the wait
-///   }
-/// @endcode
+/// @brief Fast async-capable mutex with user-space fast path and kqueue kernel fallback.
 ///
 class alignas( detail::hardware_destructive_interference_size ) NOVA_SYNC_CAPABILITY( "mutex" ) fast_kqueue_mutex
 {
@@ -196,9 +143,6 @@ public:
 
     /// @brief Attempts to acquire the lock, blocking for up to @p rel_time.
     ///
-    /// Casts the duration to nanoseconds and delegates to the private slow path.
-    /// Zero calls to now().
-    ///
     /// @return `true` if the lock was acquired, `false` if the duration expired.
     template < class Rep, class Period >
     bool try_lock_for( const std::chrono::duration< Rep, Period >& rel_time ) NOVA_SYNC_TRY_ACQUIRE( true )
@@ -207,11 +151,6 @@ public:
     }
 
     /// @brief Attempts to acquire the lock, blocking until @p abs_time is reached.
-    ///
-    /// Specializes on Clock type to use the optimal kevent_until overload:
-    /// - system_clock → uses system time-based timer event
-    /// - steady_clock → uses steady time-based timer event
-    /// - other clocks → fallback to try_lock_for_ns with duration computation
     ///
     /// @return `true` if the lock was acquired, `false` if the deadline expired.
     template < class Clock, class Duration >
@@ -258,8 +197,6 @@ public:
     }
 
     /// @brief Register an async waiter before polling the file descriptor.
-    ///
-    /// Must be paired with `remove_async_waiter()` or by consuming the lock after successful acquisition.
     uint32_t add_async_waiter() noexcept
     {
         return state_.fetch_add( 2u, std::memory_order_relaxed ) + 2u;
@@ -272,13 +209,10 @@ public:
     }
 
     /// @brief Drain pending kernel notifications after acquiring the lock.
-    ///
-    /// Call this after `try_lock()` succeeds while registered as an async waiter.
-    /// Safe to call when no notifications are pending.
     void consume_lock() const noexcept;
 
 private:
-    std::atomic< uint32_t > state_ { 0 }; // Bit 0: locked; Bits 1-31: waiter count
+    std::atomic< uint32_t > state_ { 0 };
     const int               kqfd_ { -1 };
 
     void lock_slow() noexcept;

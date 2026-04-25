@@ -1,6 +1,6 @@
 # nova::sync
 
-Synchronization primitives for C++20: specialized mutex types optimized for use cases.
+Synchronization primitives for C++20: specialized mutex and event types optimized for different use cases.
 
 ## Mutex Types
 
@@ -24,31 +24,22 @@ Synchronization primitives for C++20: specialized mutex types optimized for use 
 
 ### `fast_mutex`
 
-Lock-free implementation using `std::atomic::wait()`. Offers superior performance to `std::mutex` for contention-free and
-moderately-contended scenarios.
+Lock-free fast path using `std::atomic::wait()`. Superior performance to `std::mutex` under low-to-moderate contention.
 
 ### `fair_mutex`
 
-Ticket lock implementation guaranteeing FIFO lock acquisition order. Prevents starvation and provides predictable fair
-scheduling under high contention.
+Ticket lock guaranteeing FIFO lock acquisition order. Prevents starvation under high contention.
 
 ### POSIX real-time mutexes
 
-Priority ceiling and inheritance protocols prevent priority inversion by temporarily boosting the lock holder's priority
-to the highest waiter's level. Significantly higher locking overhead; suitable only for real-time systems where priority
-inversion avoidance is critical.
+Priority ceiling and inheritance protocols prevent priority inversion. Significantly higher locking overhead; suitable only for real-time systems requiring deterministic scheduling.
 
 ### Platform-specific async mutexes
 
-`win32_mutex`, `kqueue_mutex`, and `eventfd_mutex` (and their cross-platform alias `native_async_mutex`)
-expose native OS handles (Win32 `HANDLE`, kqueue fd, eventfd respectively) enabling integration with event loops
-(Boost.Asio, libdispatch, epoll, Qt, etc.).
+`win32_mutex`, `kqueue_mutex`, and `eventfd_mutex` (cross-platform alias: `native_async_mutex`)
+expose native OS handles enabling integration with event loops (Boost.Asio, libdispatch, epoll, Qt, etc.).
 
-The ready-made integration headers use the following handler convention:
-The ready-made integration headers use an "expected"-style handler
-convention: handlers receive an `expected<std::unique_lock<Mutex>,
-std::error_code>` (`std::expected` or `tl::expected`). On success the
-expected holds a locked `unique_lock`; on error it holds the error code.
+Handlers receive an `expected<std::unique_lock<Mutex>, std::error_code>` (`std::expected` or `tl::expected`):
 
 ```cpp
 void handler(expected<std::unique_lock<Mutex>, std::error_code> result);
@@ -98,10 +89,13 @@ std::unique_lock lock = fut.get(); // blocks until acquired; lock.owns_lock() ==
 // To cancel: descriptor->cancel(); // fut will never become ready
 ```
 
+### Thread Safety Analysis
+
+All mutex types are annotated for Clang's thread safety analysis (`-Wthread-safety`). The `NOVA_SYNC_GUARDED_BY`, `NOVA_SYNC_REQUIRES`, `NOVA_SYNC_EXCLUDES` and related macros (defined in `<nova/sync/mutex/annotations.hpp>`) expand to the corresponding `__attribute__` annotations on Clang and to nothing on other compilers.
+
 
 ### Benchmarks
 
-Benchmarks for the mutex implementations (graphs are SVGs stored in the `benchmarks/` directory).
 The following results were recorded on Ubuntu 25.04 on an Intel i7-14700K.
 
 #### Linux (Ubuntu 25.10) — Intel i7-14700K
@@ -137,24 +131,26 @@ Multi-threaded benchmark:
 
 ## Event Types
 
-Event primitives for thread synchronization. There are variants for manual-reset and auto-reset semantics, with optional support for timed waits.
+| Type | Timed waits | Reset | Native handle |
+|------|-------------|-------|---------------|
+| `manual_reset_event` | — | Manual | — |
+| `timed_manual_reset_event` | `try_wait_for` / `try_wait_until` | Manual | — |
+| `native_manual_reset_event`| `try_wait_for` / `try_wait_until` | Manual | `native_handle()` |
+| `auto_reset_event` | — | Automatic | — |
+| `timed_auto_reset_event` | `try_wait_for` / `try_wait_until` | Automatic | — |
+| `native_auto_reset_event`  | `try_wait_for` / `try_wait_until` | Automatic | `native_handle()` |
 
-A manual-reset event is either *set* or *not set*. When set, every waiting thread is woken. The event stays set until `reset()` is called explicitly.
+### Manual-reset events
 
-An auto-reset event delivers exactly one token per `signal()` call. Each token is consumed by exactly one `wait()` / `try_wait()` caller. Successive
-`signal()` calls without an intervening `wait()` are coalesced when no waiters are registered.
+Once `signal()` is called, all waiters are woken and subsequent `wait()` / `try_wait()` calls return immediately until `reset()` is called.
 
-| Type | Timed waits | Reset |
-|------|-------------|-----------|
-| `manual_reset_event` | - | Manual |
-| `timed_manual_reset_event` | `wait_for` / `wait_until` | Manual |
-| `native_manual_reset_event`| `wait_for` / `wait_until` | Manual |
-| `auto_reset_event` | - | Automatic |
-| `timed_auto_reset_event` | `wait_for` / `wait_until` | Automatic |
-| `native_auto_reset_event`  | `wait_for` / `wait_until` | Automatic |
+### Auto-reset events
 
-The `native_*` variants map directly to OS-specific synchronization primitives (`eventfd` on Linux, `kqueue` on macOS, `SetEvent` on Windows) and expose their underlying OS handle via `native_handle()`. This makes them ideal for integration with non-blocking event loops, C++20 coroutines, or C++26 executors.
+Each `signal()` delivers exactly one token. A blocked waiter consumes it; otherwise the next `wait()` / `try_wait()` call consumes it.
 
+### Native events
+
+The `native_*` variants map to OS primitives (`eventfd` on Linux, `kqueue` on macOS, `SetEvent` on Windows) and expose `native_handle()` for integration with event loops, C++20 coroutines, or C++26 executors.
 
 ```cpp
 nova::sync::manual_reset_event ev;

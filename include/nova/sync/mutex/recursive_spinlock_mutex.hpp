@@ -63,7 +63,6 @@ public:
     }
 
     /// @brief Releases the lock (decrements recursion depth).
-    /// @details Lock is fully released when recursion depth reaches zero.
     void unlock() noexcept NOVA_SYNC_RELEASE()
     {
         if ( --recursion_count_ == 0 )

@@ -15,10 +15,9 @@ namespace nova::sync {
 
 /// @brief Auto-reset event with timed-wait support.
 ///
-/// The event starts in the "not set" state.  signal() delivers exactly one
-/// token: if a thread is already blocked in wait(), it is woken and the
-/// token is consumed atomically. If no thread is waiting the token is
-/// stored and consumed by the next call to wait() or try_wait().
+/// Each `signal()` delivers exactly one token. If a thread is blocked in
+/// `wait()`, it is woken and the token is consumed. Otherwise the token is
+/// stored for the next `wait()` / `try_wait()` call.
 class timed_auto_reset_event
 {
     // State encoding helpers
@@ -39,9 +38,6 @@ public:
     timed_auto_reset_event& operator=( const timed_auto_reset_event& ) = delete;
 
     /// @brief Delivers one token, waking exactly one waiter.
-    ///
-    /// Idempotent when already set: a second signal() without an intervening
-    /// wait() is discarded.
     void signal() noexcept
     {
         uint32_t s = state_.load( std::memory_order_relaxed );

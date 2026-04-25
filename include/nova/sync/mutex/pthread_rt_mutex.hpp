@@ -45,25 +45,11 @@ struct priority_ceiling
     {}
 };
 
-/// @brief A POSIX mutex that implements priority protection or inheritance.
-/// @details
-/// Implements either PTHREAD_PRIO_PROTECT or PTHREAD_PRIO_INHERIT protocol,
-/// selected via the \p Policy template parameter. Useful for real-time
-/// applications to avoid priority inversion.
+/// @brief POSIX real-time mutex with priority ceiling or inheritance protocol.
 ///
-/// - **priority_ceiling**: The mutex carries a fixed priority ceiling. Any thread
-///   acquiring the lock is temporarily elevated to that ceiling, protecting against
-///   lower-priority preemption.
-/// - **priority_inherit**: When a higher-priority thread waits on the mutex, the
-///   current owner is temporarily boosted to the waiter's priority, ensuring
-///   timely lock release.
+/// Requires SCHED_FIFO or SCHED_RR scheduling for effective priority protection.
 ///
-/// Thread scheduling policy must be SCHED_FIFO or SCHED_RR for effective priority
-/// protection; SCHED_OTHER threads may use PTHREAD_PRIO_INHERIT but PTHREAD_PRIO_PROTECT
-/// will fail.
-///
-/// @tparam Policy  One of `pthread_mutex_policy::priority_ceiling` or
-///                 `pthread_mutex_policy::priority_inherit`.
+/// @tparam Policy  `pthread_mutex_policy::priority_ceiling` or `priority_inherit`.
 template < pthread_mutex_policy Policy >
 class NOVA_SYNC_CAPABILITY( "mutex" ) pthread_rt_mutex
 {

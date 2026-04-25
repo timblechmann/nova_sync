@@ -10,8 +10,7 @@
 
 namespace nova::sync {
 
-/// @brief Fair mutex.
-/// @details Uses a ticket lock algorithm to ensure FIFO fairness.
+/// @brief Fair mutex with FIFO lock acquisition order (ticket lock).
 class NOVA_SYNC_CAPABILITY( "mutex" ) fair_mutex
 {
 public:

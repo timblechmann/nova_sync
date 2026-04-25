@@ -10,11 +10,10 @@
 
 namespace nova::sync {
 
-/// @brief Manual-reset event based on OS primitives.
+/// @brief Manual-reset event backed by OS primitives (`eventfd`, `kqueue`, Win32 event).
 ///
-/// Maps directly to OS-specific synchronization primitives (e.g. eventfd on Linux, kqueue on macOS, SetEvent on
-/// Windows). The event starts in the "not set" state. Once signal() is called every thread currently blocked in wait()
-/// is woken and every subsequent call to wait() / try_wait() returns immediately — until reset() is called.
+/// Once `signal()` is called, all waiters are woken and subsequent `wait()` /
+/// `try_wait()` calls return immediately until `reset()` is called.
 class native_manual_reset_event
 {
 public:
@@ -35,16 +34,11 @@ public:
     native_manual_reset_event( const native_manual_reset_event& )            = delete;
     native_manual_reset_event& operator=( const native_manual_reset_event& ) = delete;
 
-    /// @brief Returns the underlying OS native handle.
-    ///
-    /// This handle can be used to wait for the event via an event loop,
-    /// enabling integration with C++20 coroutines or C++26 executors.
+    /// @brief Returns the underlying OS native handle for event-loop integration.
     /// @return The native handle (file descriptor or HANDLE).
     native_handle_type native_handle() const noexcept;
 
     /// @brief Transitions the event to "set", waking all waiters.
-    ///
-    /// Idempotent: calling signal() on an already-set event is a no-op.
     void signal() noexcept;
 
     /// @brief Transitions the event back to "not set".

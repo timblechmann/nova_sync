@@ -21,29 +21,6 @@ namespace nova::sync {
 
 /// @brief Simple async-capable mutex implemented via Linux `eventfd` in semaphore mode.
 ///
-/// Uses the eventfd counter directly as a binary semaphore: the fd starts
-/// readable (count=1, unlocked) and `try_lock()` reads one token.  `unlock()`
-/// writes one token, waking exactly one `poll()` waiter.
-///
-/// Example (Simple Poll Loop)
-/// --------------------------
-/// @code
-///   eventfd_mutex mtx;
-///   int fd = mtx.native_handle();
-///
-///   // No waiter registration needed
-///   while (true) {
-///       if (mtx.try_lock()) {
-///           // Critical section
-///           mtx.unlock();
-///           break;
-///       }
-///       // Wait for fd readability (via poll/epoll/select)
-///       poll(..., fd, POLLIN, ...);
-///       // Spurious wakeups possible; will retry try_lock
-///   }
-/// @endcode
-///
 class NOVA_SYNC_CAPABILITY( "mutex" ) eventfd_mutex
 {
 public:
@@ -67,8 +44,6 @@ public:
 
     /// @brief Attempts to acquire the lock, blocking for up to @p rel_ns nanoseconds.
     ///
-    /// Single ppoll call per attempt — no calls to now().
-    ///
     /// @return `true` if the lock was acquired, `false` if the duration expired.
     bool try_lock_for( duration_type rel_ns ) noexcept NOVA_SYNC_TRY_ACQUIRE( true )
     {
@@ -83,8 +58,6 @@ public:
 
     /// @brief Attempts to acquire the lock, blocking for up to @p rel_time.
     ///
-    /// Casts the duration to nanoseconds and delegates to the nanosecond overload.
-    ///
     /// @return `true` if the lock was acquired, `false` if the duration expired.
     template < class Rep, class Period >
     bool try_lock_for( const std::chrono::duration< Rep, Period >& rel_time ) NOVA_SYNC_TRY_ACQUIRE( true )
@@ -93,11 +66,6 @@ public:
     }
 
     /// @brief Attempts to acquire the lock, blocking until @p abs_time is reached.
-    ///
-    /// Specializes on Clock type to use the optimal ppoll_until overload:
-    /// - system_clock → CLOCK_REALTIME timerfd
-    /// - steady_clock → CLOCK_MONOTONIC timerfd
-    /// - other clocks → fallback to try_lock_for with duration computation
     ///
     /// @return `true` if the lock was acquired, `false` if the deadline expired.
     template < class Clock, class Duration >
@@ -124,10 +92,6 @@ public:
     void unlock() noexcept NOVA_SYNC_RELEASE();
 
     /// @brief Returns the eventfd file descriptor for async integration.
-    ///
-    /// When waiting on this file descriptor, it becomes readable when the mutex
-    /// is unlocked.  The caller can then attempt `try_lock()` and, if
-    /// unsuccessful, re-register for notifications.
     [[nodiscard]] native_handle_type native_handle() const noexcept
     {
         return evfd_;
@@ -138,17 +102,7 @@ private:
 };
 
 
-/// @brief Fast async-capable mutex optimized for event loop integration.
-///
-/// Provides user-space fast path with kernel fallback for high-contention scenarios.
-/// Ideal for integration with event loops (Boost.Asio, Qt, libdispatch).
-///
-/// To integrate with an event loop:
-///  1. Call `add_async_waiter()` before waiting on `native_handle()`.
-///  2. After `try_lock()` succeeds, call `consume_lock()`.
-///  3. Call `remove_async_waiter()` when done or on timeout.
-///
-/// Use `async_waiter_guard` for automatic lifetime management.
+/// @brief Fast async-capable mutex with user-space fast path and eventfd kernel fallback.
 ///
 class alignas( detail::hardware_destructive_interference_size ) NOVA_SYNC_CAPABILITY( "mutex" ) fast_eventfd_mutex
 {
@@ -189,9 +143,6 @@ public:
 
     /// @brief Attempts to acquire the lock, blocking for up to @p rel_time.
     ///
-    /// Casts the duration to nanoseconds and delegates to the private slow path.
-    /// Zero calls to now().
-    ///
     /// @return `true` if the lock was acquired, `false` if the duration expired.
     template < class Rep, class Period >
     bool try_lock_for( const std::chrono::duration< Rep, Period >& rel_time )
@@ -200,11 +151,6 @@ public:
     }
 
     /// @brief Attempts to acquire the lock, blocking until @p abs_time is reached.
-    ///
-    /// Specializes on Clock type to use the optimal ppoll_until overload:
-    /// - system_clock → CLOCK_REALTIME timerfd
-    /// - steady_clock → CLOCK_MONOTONIC timerfd
-    /// - other clocks → fallback to try_lock_for_ns with duration computation
     ///
     /// @return `true` if the lock was acquired, `false` if the deadline expired.
     template < class Clock, class Duration >
@@ -266,8 +212,6 @@ public:
     }
 
     /// @brief Register an async waiter before polling the file descriptor.
-    ///
-    /// Must be paired with `remove_async_waiter()` or by consuming the lock after successful acquisition.
     uint32_t add_async_waiter() noexcept
     {
         return state_.fetch_add( 2u, std::memory_order_relaxed ) + 2u;
@@ -279,18 +223,13 @@ public:
     }
 
     /// @brief Drain pending kernel notifications after acquiring the lock.
-    ///
-    /// Call this after `try_lock()` succeeds while registered as an async waiter.
-    /// Safe to call when no notifications are pending.
     void consume_lock() const noexcept NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS;
 
 private:
-    std::atomic< uint32_t > state_ { 0 }; // Bit 0: locked; Bits 1-31: waiter count
+    std::atomic< uint32_t > state_ { 0 };
     int                     evfd_ { -1 };
 
     void lock_slow() noexcept;
-
-    /// Blocking slow path: waits up to rel_ns for the lock.  No calls to now().
     bool try_lock_for_ns( duration_type rel_ns ) noexcept;
 };
 
