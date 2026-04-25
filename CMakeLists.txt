@@ -22,20 +22,6 @@ add_custom_target(nova_sync_project_files SOURCES
     .github/workflows/ci.yml
 )
 
-function(nova_sync_install_pmr)
-    if (NOT COMMAND CPMAddPackage)
-        set(CPM_DOWNLOAD_VERSION 0.42.1)
-        if(NOT EXISTS "${CMAKE_BINARY_DIR}/cmake/CPM.cmake")
-        message(STATUS "Downloading CPM.cmake ${CPM_DOWNLOAD_VERSION}...")
-        file(DOWNLOAD
-            "https://github.com/cpm-cmake/CPM.cmake/releases/download/v${CPM_DOWNLOAD_VERSION}/CPM.cmake"
-            "${CMAKE_BINARY_DIR}/cmake/CPM.cmake"
-        )
-        endif()
-        include("${CMAKE_BINARY_DIR}/cmake/CPM.cmake")
-    endif()
-endfunction()
-
 set(headers
     include/nova/sync/detail/async_support.hpp
     include/nova/sync/detail/backoff.hpp
@@ -124,6 +110,14 @@ cmake_dependent_option(
     OFF
 )
 
+if(WIN32)
+    target_compile_definitions(nova_sync PRIVATE
+        NOMINMAX
+        WIN32_LEAN_AND_MEAN
+        _WIN32_WINNT=0x0a00
+    )
+endif()
+
 if (NOVA_SYNC_THREAD_SAFETY_ANALYSIS)
     target_compile_options(nova_sync PUBLIC -Wthread-safety)
 endif()
@@ -133,6 +127,20 @@ endif()
 # Testing
 option(NOVA_SYNC_TESTS "Build unit tests" ${PROJECT_IS_TOP_LEVEL})
 if(NOVA_SYNC_TESTS)
+    function(nova_sync_install_pmr)
+        if (NOT COMMAND CPMAddPackage)
+            set(CPM_DOWNLOAD_VERSION 0.42.1)
+            if(NOT EXISTS "${CMAKE_BINARY_DIR}/cmake/CPM.cmake")
+            message(STATUS "Downloading CPM.cmake ${CPM_DOWNLOAD_VERSION}...")
+            file(DOWNLOAD
+                "https://github.com/cpm-cmake/CPM.cmake/releases/download/v${CPM_DOWNLOAD_VERSION}/CPM.cmake"
+                "${CMAKE_BINARY_DIR}/cmake/CPM.cmake"
+            )
+            endif()
+            include("${CMAKE_BINARY_DIR}/cmake/CPM.cmake")
+        endif()
+    endfunction()
+
     set(CMAKE_FOLDER "tests")
 
     if (NOT TARGET Catch2::Catch2WithMain)
@@ -189,6 +197,14 @@ if(NOVA_SYNC_TESTS)
         test/event_benchmarks.cpp
         test/event_async_asio_test.cpp
     )
+
+    if(WIN32)
+        target_compile_definitions(nova_sync_tests PRIVATE
+            NOMINMAX
+            WIN32_LEAN_AND_MEAN
+            _WIN32_WINNT=0x0a00
+        )
+    endif()
 
     if(APPLE)
         enable_language(OBJCXX)

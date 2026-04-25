@@ -28,7 +28,7 @@
 #endif
 
 #ifdef _WIN32
-#    define NOVA_SYNC_WIN32_CRITICAL_SECTION_MUTEX_arg , nova::sync::win32_recursive_mutex
+#    define NOVA_SYNC_WIN32_CRITICAL_SECTION_MUTEX_arg , nova::sync::win32_critical_section_mutex
 #    define NOVA_SYNC_WIN32_EVENT_MUTEX_arg            , nova::sync::win32_event_mutex
 #    define NOVA_SYNC_WIN32_MUTEX_arg                  , nova::sync::win32_mutex
 #    define NOVA_SYNC_WIN32_SRW_MUTEX_arg              , nova::sync::win32_srw_mutex

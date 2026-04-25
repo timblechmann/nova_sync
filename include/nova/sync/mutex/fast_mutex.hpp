@@ -23,7 +23,7 @@ public:
     inline void lock() noexcept NOVA_SYNC_ACQUIRE()
     {
         uint32_t expected = 0;
-        if ( state_.compare_exchange_strong( expected, 1, std::memory_order_acquire, std::memory_order_relaxed ) )
+        if ( state_.compare_exchange_weak( expected, 1, std::memory_order_acquire, std::memory_order_relaxed ) )
             return;
 
         lock_slow( expected );

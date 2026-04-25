@@ -19,6 +19,8 @@
 
 namespace nova::sync {
 
+using namespace std::chrono_literals;
+
 static constexpr uintptr_t kqueue_ident = 1;
 
 // ---------------------------------------------------------------------------
@@ -146,9 +148,9 @@ void fast_kqueue_mutex::lock_slow() noexcept
     }
 }
 
-bool fast_kqueue_mutex::try_lock_for_impl( std::chrono::nanoseconds rel_ns ) noexcept
+bool fast_kqueue_mutex::try_lock_for_impl( std::chrono::nanoseconds rel ) noexcept
 {
-    if ( rel_ns.count() <= 0 )
+    if ( rel <= 0ns )
         return try_lock();
 
     uint32_t expected = 0;
@@ -169,7 +171,7 @@ bool fast_kqueue_mutex::try_lock_for_impl( std::chrono::nanoseconds rel_ns ) noe
             continue;
         }
 
-        if ( !detail::kevent_for( kqfd_, rel_ns ) )
+        if ( !detail::kevent_for( kqfd_, rel ) )
             // Timed out — guard destructor calls remove_async_waiter().
             return false;
 

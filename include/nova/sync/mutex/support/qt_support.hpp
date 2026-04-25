@@ -290,13 +290,16 @@ private:
             return; // dup failed, can't proceed
 
         notifier_ = new QSocketNotifier( dup_fd_.get(), QSocketNotifier::Read, context_ );
-#    elif defined( _WIN32 )
-        notifier_ = new QWinEventNotifier( mtx_.native_handle(), context_ );
-#    endif
-
         QObject::connect( notifier_, &QSocketNotifier::activated, [ self = this->shared_from_this() ] {
             self->on_notified();
         } );
+#    elif defined( _WIN32 )
+        notifier_ = new QWinEventNotifier( mtx_.native_handle(), context_ );
+        QObject::connect( notifier_, &QWinEventNotifier::activated, [ self = this->shared_from_this() ] {
+            self->on_notified();
+        } );
+#    endif
+
         notifier_->setEnabled( true );
     }
 

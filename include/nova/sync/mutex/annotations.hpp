@@ -33,6 +33,9 @@
 //   NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS   — on a function: opt out of analysis
 // ---------------------------------------------------------------------------
 
+#ifndef __has_attribute
+#    define __has_attribute( x ) 0
+#endif
 
 #if __has_attribute( capability )
 #    define NOVA_SYNC_CAPABILITY( x ) __attribute__( ( capability( x ) ) )

@@ -3,11 +3,14 @@
 
 #pragma once
 
-#include <atomic>
 #include <chrono>
 #include <nova/sync/detail/compat.hpp>
 #include <nova/sync/detail/native_handle_support.hpp>
 #include <nova/sync/detail/timed_wait.hpp>
+
+#if defined( __linux__ )
+#    include <atomic>
+#endif
 
 namespace nova::sync {
 
@@ -75,7 +78,7 @@ public:
         if constexpr ( std::is_same_v< Clock, std::chrono::system_clock >
                        || std::is_same_v< Clock, std::chrono::steady_clock > ) {
 #if defined( _WIN32 )
-            return wait_handle_until( native_handle(), abs_time );
+            return detail::wait_handle_until( native_handle(), abs_time );
 #elif defined( __linux__ )
             if ( detail::ppoll_until( handle_.get(), abs_time ) )
                 return try_wait();
@@ -86,7 +89,7 @@ public:
             return false;
 #endif
         }
-        return try_wait_for( abs_time - Clock::now() );
+        return try_wait_for( std::chrono::round< duration_type >( abs_time - Clock::now() ) );
     }
 
     /// @brief Blocks until a token is available or the timeout expires.

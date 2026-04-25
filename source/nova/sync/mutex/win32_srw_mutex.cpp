@@ -5,44 +5,36 @@
 
 #ifdef NOVA_SYNC_HAS_WIN32_SRW_MUTEX
 
-#    ifndef WIN32_LEAN_AND_MEAN
-#        define WIN32_LEAN_AND_MEAN
-#    endif
-#    ifndef NOMINMAX
-#        define NOMINMAX
-#    endif
 #    include <windows.h>
-
-#    include <cstring>
-
-// SRWLOCK is pointer-sized and must fit in our void* storage field.
-static_assert( sizeof( SRWLOCK ) == sizeof( void* ), "SRWLOCK size mismatch with void* storage" );
 
 namespace nova::sync {
 
-static SRWLOCK* srw( void** p ) noexcept
+template < typename LockStorage >
+static SRWLOCK* srwlock_ptr( LockStorage& lock ) noexcept
 {
-    return std::launder( reinterpret_cast< SRWLOCK* >( p ) );
+    static_assert( sizeof( LockStorage ) == sizeof( SRWLOCK ), "Lock storage size must match SRWLOCK size" );
+    return std::launder( reinterpret_cast< SRWLOCK* >( &lock ) );
 }
+
 
 win32_srw_mutex::win32_srw_mutex() noexcept
 {
-    ::InitializeSRWLock( srw( &srwlock_ ) );
+    ::InitializeSRWLock( srwlock_ptr( srwlock_ ) );
 }
 
 void win32_srw_mutex::lock() noexcept
 {
-    ::AcquireSRWLockExclusive( srw( &srwlock_ ) );
+    ::AcquireSRWLockExclusive( srwlock_ptr( srwlock_ ) );
 }
 
 bool win32_srw_mutex::try_lock() noexcept
 {
-    return ::TryAcquireSRWLockExclusive( srw( &srwlock_ ) ) != FALSE;
+    return ::TryAcquireSRWLockExclusive( srwlock_ptr( srwlock_ ) ) != FALSE;
 }
 
 void win32_srw_mutex::unlock() noexcept
 {
-    ::ReleaseSRWLockExclusive( srw( &srwlock_ ) );
+    ::ReleaseSRWLockExclusive( srwlock_ptr( srwlock_ ) );
 }
 
 } // namespace nova::sync

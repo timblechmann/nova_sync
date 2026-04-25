@@ -15,7 +15,7 @@ void timed_auto_reset_event::wait() noexcept
     uint32_t s = state_.load( std::memory_order_acquire );
     while ( s >= post_one ) {
         if ( state_.compare_exchange_weak( s, s - 1u - post_one, std::memory_order_acquire, std::memory_order_relaxed ) ) {
-            sem_.try_acquire();
+            std::ignore = sem_.try_acquire();
             return;
         }
     }

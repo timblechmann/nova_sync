@@ -5,6 +5,8 @@
 #include <nova/sync/detail/timed_wait.hpp>
 #include <nova/sync/mutex/detail/async_support.hpp>
 
+#include <optional>
+
 #if defined( __linux__ )
 #    include <cerrno>
 #    include <poll.h>
@@ -16,15 +18,6 @@
 #    include <sys/time.h>
 #    include <sys/types.h>
 #elif defined( _WIN32 )
-#    ifndef WIN32_LEAN_AND_MEAN
-#        define WIN32_LEAN_AND_MEAN
-#    endif
-#    ifndef NOMINMAX
-#        define NOMINMAX
-#    endif
-#    ifndef _WIN32_WINNT
-#        define _WIN32_WINNT 0x0a00
-#    endif
 #    include <windows.h>
 #endif
 
@@ -60,11 +53,11 @@ bool ppoll_for( int fd, std::chrono::nanoseconds rel ) noexcept
             elapsed = clock::now() - start;
         else
             elapsed = 0ms;
-        auto remaining_ns = rel - *elapsed;
-        if ( remaining_ns.count() <= 0 )
+        auto remaining = rel - *elapsed;
+        if ( remaining <= 0ns )
             return false; // timeout
 
-        struct timespec ts = as_timespec( remaining_ns );
+        struct timespec ts = as_timespec( remaining );
 
         int rc = ::ppoll( &pfd, 1, &ts, nullptr );
         if ( rc > 0 )
@@ -114,14 +107,14 @@ bool ppoll_until( int lock_fd, const std::chrono::time_point< std::chrono::syste
     if ( !timer_fd )
         return false;
 
-    auto remaining_ns = std::chrono::nanoseconds( deadline - std::chrono::system_clock::now() );
+    auto remaining = deadline - std::chrono::system_clock::now();
 
-    if ( remaining_ns.count() <= 0 )
+    if ( remaining <= 0ns )
         return false;
 
     struct itimerspec spec {
         .it_interval = { 0, 0 },
-        .it_value    = as_timespec( remaining_ns ),
+        .it_value    = as_timespec( remaining ),
     };
 
     if ( ::timerfd_settime( timer_fd.get(), 0, &spec, nullptr ) < 0 )
@@ -140,15 +133,14 @@ bool ppoll_until( int lock_fd, const std::chrono::time_point< std::chrono::stead
     if ( !timer_fd )
         return false;
 
-    auto remaining_ns
-        = std::chrono::duration_cast< std::chrono::nanoseconds >( deadline - std::chrono::steady_clock::now() );
+    auto remaining = deadline - std::chrono::steady_clock::now();
 
-    if ( remaining_ns.count() <= 0 )
+    if ( remaining <= 0ns )
         return false;
 
     struct itimerspec spec {
         .it_interval = { 0, 0 },
-        .it_value    = as_timespec( remaining_ns ),
+        .it_value    = as_timespec( remaining ),
     };
 
     if ( ::timerfd_settime( timer_fd.get(), 0, &spec, nullptr ) < 0 )
@@ -262,33 +254,28 @@ bool kevent_until( int kqfd,
 // ============================================================================
 #elif defined( _WIN32 )
 
-bool wait_handle_for( HANDLE handle, std::chrono::milliseconds rel_ms ) noexcept
+bool wait_handle_for( HANDLE handle, std::chrono::nanoseconds rel ) noexcept
 {
-    using clock = std::chrono::steady_clock;
-
-    auto                             start = clock::now();
-    std::optional< clock::duration > elapsed;
-
-    while ( true ) {
-        if ( elapsed )
-            elapsed = clock::now() - start;
-        else
-            elapsed = 0ms;
-        auto remaining_ms = std::chrono::duration_cast< std::chrono::milliseconds >( rel_ms - *elapsed );
-
-        if ( remaining_ms.count() <= 0 )
-            return false; // timeout
-
-        DWORD timeout = static_cast< DWORD >( remaining_ms.count() );
-        DWORD rc      = ::WaitForSingleObject( handle, timeout );
-
-        if ( rc == WAIT_OBJECT_0 )
-            return true; // signaled
-        if ( rc == WAIT_TIMEOUT )
-            continue;    // recompute and retry
-        // WAIT_FAILED or other: treat as timeout
+    if ( rel <= 0ns )
         return false;
-    }
+
+    auto timer_handle = scoped_handle( ::CreateWaitableTimerW( nullptr, TRUE, nullptr ) );
+    if ( !timer_handle )
+        return false;
+
+    // Windows FILETIME units are 100-nanosecond intervals.
+    // Negative value means relative time from now.
+    LONGLONG filetime_units = -( rel.count() / 100 );
+    if ( filetime_units == 0 )
+        filetime_units = -1; // ensure at least one tick of wait
+
+    LARGE_INTEGER due_time;
+    due_time.QuadPart = filetime_units;
+
+    if ( !::SetWaitableTimer( timer_handle.get(), &due_time, 0, nullptr, nullptr, FALSE ) )
+        return false;
+
+    return wait_handle_until( handle, timer_handle.get() );
 }
 
 /// @brief Wait on two handles: the lock handle and a timer handle.
@@ -317,19 +304,18 @@ bool wait_handle_until( HANDLE lock_handle, HANDLE timer_handle ) noexcept
 bool wait_handle_until( HANDLE                                                      lock_handle,
                         const std::chrono::time_point< std::chrono::system_clock >& deadline ) noexcept
 {
-    auto timer_handle = make_scoped_handle( ::CreateWaitableTimerW( nullptr, TRUE, nullptr ) );
+    auto timer_handle = scoped_handle( ::CreateWaitableTimerW( nullptr, TRUE, nullptr ) );
     if ( !timer_handle )
         return false;
 
-    auto remaining_ns
-        = std::chrono::duration_cast< std::chrono::nanoseconds >( deadline - std::chrono::system_clock::now() );
+    auto remaining = deadline - std::chrono::system_clock::now();
 
-    if ( remaining_ns.count() <= 0 )
+    if ( remaining <= 0ms )
         return false;
 
     // Convert to 100-nanosecond intervals (Windows FILETIME unit)
     // Negative values mean relative time from now
-    LONGLONG filetime_units = -( remaining_ns.count() / 100 );
+    LONGLONG filetime_units = -( std::chrono::nanoseconds( remaining ).count() / 100 );
 
     LARGE_INTEGER due_time;
     due_time.QuadPart = filetime_units;
@@ -350,19 +336,18 @@ bool wait_handle_until( HANDLE                                                  
 bool wait_handle_until( HANDLE                                                      lock_handle,
                         const std::chrono::time_point< std::chrono::steady_clock >& deadline ) noexcept
 {
-    auto timer_handle = make_scoped_handle( ::CreateWaitableTimerW( nullptr, TRUE, nullptr ) );
+    auto timer_handle = scoped_handle( ::CreateWaitableTimerW( nullptr, TRUE, nullptr ) );
     if ( !timer_handle )
         return false;
 
-    auto remaining_ns
-        = std::chrono::duration_cast< std::chrono::nanoseconds >( deadline - std::chrono::steady_clock::now() );
+    auto remaining = deadline - std::chrono::steady_clock::now();
 
-    if ( remaining_ns.count() <= 0 )
+    if ( remaining <= 0ms )
         return false;
 
     // Convert to 100-nanosecond intervals (Windows FILETIME unit)
     // Negative values mean relative time from now
-    LONGLONG filetime_units = -( remaining_ns.count() / 100 );
+    LONGLONG filetime_units = -( std::chrono::nanoseconds( remaining ).count() / 100 );
 
     LARGE_INTEGER due_time;
     due_time.QuadPart = filetime_units;

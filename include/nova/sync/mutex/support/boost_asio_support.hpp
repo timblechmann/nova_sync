@@ -47,6 +47,7 @@ auto async_wait( boost::asio::posix::stream_descriptor& descriptor, Handler&& ha
     return descriptor.async_wait( boost::asio::posix::stream_descriptor::wait_read, std::forward< Handler >( handler ) );
 }
 #    elif defined( _WIN32 )
+template < typename Handler >
 auto async_wait( boost::asio::windows::object_handle& descriptor, Handler&& handler )
 {
     return descriptor.async_wait( std::forward< Handler >( handler ) );

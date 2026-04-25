@@ -4,6 +4,7 @@
 #pragma once
 
 #include <atomic>
+#include <cassert>
 #include <chrono>
 #include <semaphore>
 #include <tuple> // std::ignore
@@ -79,7 +80,7 @@ public:
 
         if ( state_.load( std::memory_order_acquire ) & flag_bit ) {
             state_.fetch_sub( waiter_one, std::memory_order_relaxed );
-            sem_.try_acquire();
+            std::ignore = sem_.try_acquire();
             return;
         }
 
@@ -104,7 +105,7 @@ public:
 
         if ( state_.load( std::memory_order_acquire ) & flag_bit ) {
             state_.fetch_sub( waiter_one, std::memory_order_relaxed );
-            sem_.try_acquire();
+            std::ignore = sem_.try_acquire();
             return true;
         }
 

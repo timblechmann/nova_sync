@@ -8,10 +8,14 @@
 #endif
 
 #if defined( _WIN32 )
+#    include <limits>
 typedef void* HANDLE;
 extern "C" {
 __declspec( dllimport ) int __stdcall CloseHandle( void* );
 }
+
+#    include <memory>
+
 #endif
 
 namespace nova::sync::detail {
@@ -93,10 +97,9 @@ private:
 
 struct handle_deleter
 {
-    static constexpr HANDLE invalidHandle = ( (void*)(long long)-1 );
-
     void operator()( HANDLE h ) const noexcept
     {
+        const HANDLE invalidHandle = HANDLE( std::numeric_limits< uintptr_t >::max() );
         if ( h && h != invalidHandle )
             ::CloseHandle( h );
     }

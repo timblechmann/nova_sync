@@ -30,16 +30,28 @@ bool kevent_until( int                                                         k
                    const std::chrono::time_point< std::chrono::steady_clock >& deadline ) noexcept;
 
 // ============================================================================
-// Windows — WaitForSingleObject with relative millisecond timeout and retries
+// Windows — waitable-timer based waiting with sub-millisecond precision
 // ============================================================================
 #elif defined( _WIN32 )
 
-/// @brief Wait on a handle for up to the specified duration.
+typedef void* HANDLE;
+
+/// @brief Wait on a handle for up to the specified relative duration.
+///
+/// Uses a waitable timer alongside the lock handle so the wait is interrupted
+/// as soon as either the handle is signaled or the timer fires, with
+/// 100-nanosecond timer resolution (Windows FILETIME granularity).
 ///
 /// @return `true` if the handle was signaled, `false` on timeout or error.
-bool wait_handle_for( HANDLE handle, std::chrono::milliseconds rel_ms ) noexcept;
+bool wait_handle_for( HANDLE handle, std::chrono::nanoseconds rel_ns ) noexcept;
 
-/// @brief Wait on a lock handle until a timer signals or lock is signaled.
+/// @brief Convenience overload: converts milliseconds to nanoseconds.
+inline bool wait_handle_for( HANDLE handle, std::chrono::milliseconds rel_ms ) noexcept
+{
+    return wait_handle_for( handle, std::chrono::nanoseconds( rel_ms ) );
+}
+
+/// @brief Wait on two handles: the lock handle and a timer handle.
 ///
 /// @return `true` if @p lock_handle is signaled, `false` if timer fires or on error.
 bool wait_handle_until( HANDLE lock_handle, HANDLE timer_handle ) noexcept;

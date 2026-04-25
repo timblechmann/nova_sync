@@ -5,16 +5,6 @@
 
 #ifdef NOVA_SYNC_HAS_WIN32_CRITICAL_SECTION_MUTEX
 
-#    ifndef WIN32_LEAN_AND_MEAN
-#        define WIN32_LEAN_AND_MEAN
-#    endif
-#    ifndef NOMINMAX
-#        define NOMINMAX
-#    endif
-#    ifndef _WIN32_WINNT
-#        define _WIN32_WINNT 0x0a00
-#    endif
-
 #    include <windows.h>
 
 #    include <cassert>

@@ -18,6 +18,8 @@
 
 namespace nova::sync {
 
+using namespace std::chrono_literals;
+
 // ---------------------------------------------------------------------------
 // eventfd_mutex — simple poll-based variant, no user-space waiter count
 // ---------------------------------------------------------------------------
@@ -159,9 +161,9 @@ void fast_eventfd_mutex::lock_slow() noexcept
     }
 }
 
-bool fast_eventfd_mutex::try_lock_for_ns( duration_type rel_ns ) noexcept
+bool fast_eventfd_mutex::try_lock_for_ns( duration_type rel ) noexcept
 {
-    if ( rel_ns.count() <= 0 )
+    if ( rel <= 0ns )
         return try_lock();
 
     auto                                             s = add_async_waiter();
@@ -181,7 +183,7 @@ bool fast_eventfd_mutex::try_lock_for_ns( duration_type rel_ns ) noexcept
             continue;
         }
 
-        if ( !detail::ppoll_for( evfd_, rel_ns ) ) {
+        if ( !detail::ppoll_for( evfd_, rel ) ) {
             // Timed out — guard destructor calls remove_async_waiter().
             return false;
         }

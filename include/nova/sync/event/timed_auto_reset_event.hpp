@@ -4,6 +4,7 @@
 #pragma once
 
 #include <atomic>
+#include <cassert>
 #include <chrono>
 #include <semaphore>
 #include <tuple> // std::ignore
@@ -88,7 +89,7 @@ public:
         while ( s >= post_one ) {
             if ( state_.compare_exchange_weak(
                      s, s - 1u - post_one, std::memory_order_acquire, std::memory_order_relaxed ) ) {
-                sem_.try_acquire();
+                std::ignore = sem_.try_acquire();
                 return true;
             }
         }

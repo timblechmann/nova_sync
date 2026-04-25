@@ -105,12 +105,20 @@ struct async_event_wait_op : std::enable_shared_from_this< async_event_wait_op< 
                 return invoke_event_error( self->handler_, std::errc::operation_canceled );
             }
 
+#    if defined( _WIN32 )
+            // On Windows, object_handle::async_wait uses RegisterWaitForSingleObject,
+            // which atomically consumes auto-reset events and acquires semaphores.
+            // The signal is already consumed when this callback fires, so try_wait()
+            // would always return false. A clean wakeup (no error) means success.
+            return invoke_event_success( self->handler_ );
+#    else
             if ( self->evt_.try_wait() ) {
                 return invoke_event_success( self->handler_ );
             }
 
             // Spurious wakeup — retry
             self->start_wait();
+#    endif
         } );
     }
 
@@ -165,6 +173,16 @@ struct async_event_wait_cancellable_op :
                 return;
             }
 
+#    if defined( _WIN32 )
+            // On Windows, object_handle::async_wait uses RegisterWaitForSingleObject,
+            // which atomically consumes auto-reset events. A clean wakeup means success.
+            {
+                bool expected = false;
+                if ( self->handler_invoked_.compare_exchange_strong(
+                         expected, true, std::memory_order_release, std::memory_order_acquire ) )
+                    invoke_event_success( self->handler_ );
+            }
+#    else
             if ( self->evt_.try_wait() ) {
                 // Double-check cancellation after consuming the token
                 if ( self->is_cancelled() ) {
@@ -181,6 +199,7 @@ struct async_event_wait_cancellable_op :
 
             // Spurious wakeup — retry
             self->start_wait();
+#    endif
         } );
     }
 
@@ -360,12 +379,19 @@ async_event_wait_future_state< Event > async_wait( boost::asio::io_context& ioc,
                 return; // cancelled — promise intentionally left unfulfilled
             }
 
+#        if defined( _WIN32 )
+            // On Windows, RegisterWaitForSingleObject atomically consumes the event.
+            // A clean callback (no error) means the event fired successfully.
+            promise.set_value();
+            *do_wait = nullptr;
+#        else
             if ( evt.try_wait() ) {
                 promise.set_value();
                 *do_wait = nullptr;
             } else {
                 std::invoke( *do_wait ); // spurious — retry
             }
+#        endif
         } );
     };
 #    else
@@ -381,12 +407,17 @@ async_event_wait_future_state< Event > async_wait( boost::asio::io_context& ioc,
                 return;
             }
 
+#        if defined( _WIN32 )
+            promise->set_value();
+            *do_wait = nullptr;
+#        else
             if ( evt.try_wait() ) {
                 promise->set_value();
                 *do_wait = nullptr;
             } else {
                 std::invoke( *do_wait );
             }
+#        endif
         } );
     };
 #    endif
