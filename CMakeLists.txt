@@ -37,15 +37,21 @@ function(nova_sync_install_pmr)
 endfunction()
 
 set(headers
+    include/nova/sync/detail/async_support.hpp
     include/nova/sync/detail/backoff.hpp
     include/nova/sync/detail/compat.hpp
     include/nova/sync/detail/syscall.hpp
     include/nova/sync/detail/timed_wait.hpp
+
     include/nova/sync/event/auto_reset_event.hpp
     include/nova/sync/event/concepts.hpp
+    include/nova/sync/event/detail/async_support.hpp
     include/nova/sync/event/manual_reset_event.hpp
     include/nova/sync/event/native_auto_reset_event.hpp
     include/nova/sync/event/native_manual_reset_event.hpp
+    include/nova/sync/event/support/boost_asio_support.hpp
+    include/nova/sync/event/support/libdispatch_support.hpp
+    include/nova/sync/event/support/qt_support.hpp
     include/nova/sync/event/timed_auto_reset_event.hpp
     include/nova/sync/event/timed_manual_reset_event.hpp
     include/nova/sync/mutex/annotations.hpp
@@ -164,11 +170,16 @@ if(NOVA_SYNC_TESTS)
     endif()
 
     add_executable(nova_sync_tests
+        include/nova/sync/event/support/boost_asio_support.hpp # to make clangd happy
+        include/nova/sync/event/support/libdispatch_support.hpp
+        include/nova/sync/event/support/qt_support.hpp
+        include/nova/sync/event/detail/async_support.hpp
         include/nova/sync/mutex/support/boost_asio_support.hpp # to make clangd happy
         include/nova/sync/mutex/support/libdispatch_support.hpp
         include/nova/sync/mutex/support/qt_support.hpp
         include/nova/sync/mutex/detail/async_support.hpp
 
+        test/event_types.hpp
         test/mutex_types.hpp
         test/mutex_test.cpp
         test/mutex_benchmarks.cpp
@@ -176,11 +187,13 @@ if(NOVA_SYNC_TESTS)
         test/mutex_thread_safety_test.cpp
         test/event_test.cpp
         test/event_benchmarks.cpp
+        test/event_async_asio_test.cpp
     )
 
     if(APPLE)
         enable_language(OBJCXX)
         target_sources(nova_sync_tests PRIVATE test/mutex_async_libdispatch_test.mm)
+        target_sources(nova_sync_tests PRIVATE test/event_async_libdispatch_test.mm)
         if(FALSE)
             target_compile_options(nova_sync_tests PRIVATE
                 $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>
@@ -204,6 +217,7 @@ if(NOVA_SYNC_TESTS)
         target_link_libraries(nova_sync_tests PRIVATE Qt6::Core)
         target_compile_definitions(nova_sync_tests PRIVATE NOVA_SYNC_HAS_QT=1)
         target_sources(nova_sync_tests PRIVATE test/mutex_async_qt_test.cpp)
+        target_sources(nova_sync_tests PRIVATE test/event_async_qt_test.cpp)
     endif()
 
     enable_testing()

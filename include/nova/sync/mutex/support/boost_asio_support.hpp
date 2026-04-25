@@ -82,16 +82,14 @@ struct async_acquire_op : std::enable_shared_from_this< async_acquire_op< Mutex,
             // If so, invoke handler with cancellation error instead
             if ( self->is_cancelled() ) {
                 self->waiter_guard_.release();
-                return invoke_with_error< Mutex >( self->handler_,
-                                                   std::make_error_code( std::errc::operation_canceled ) );
+                return invoke_with_error< Mutex >( self->handler_, std::errc::operation_canceled );
             }
 
             std::error_code ec = std::make_error_code( static_cast< std::errc >( bec.value() ) );
             if ( ec ) {
                 self->waiter_guard_.release();
                 // Cancelled or descriptor error — forward as operation_canceled.
-                return invoke_with_error< Mutex >( self->handler_,
-                                                   std::make_error_code( std::errc::operation_canceled ) );
+                return invoke_with_error< Mutex >( self->handler_, std::errc::operation_canceled );
             }
 
             if ( self->waiter_guard_.try_acquire() ) {

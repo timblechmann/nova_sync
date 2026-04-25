@@ -3,27 +3,13 @@
 
 #pragma once
 
+#include <nova/sync/detail/async_support.hpp>
 #include <nova/sync/mutex/annotations.hpp>
 #include <nova/sync/mutex/concepts.hpp>
 #include <nova/sync/mutex/support/async_waiter_guard.hpp>
 
-#if __cplusplus >= 202302L && __has_include( <expected> )
-#    define NOVA_SYNC_HAS_EXPECTED
-#    define NOVA_SYNC_HAS_STD_EXPECTED
-#    include <expected>
-#endif
-
-#if __has_include( <tl/expected.hpp> )
-#    ifndef NOVA_SYNC_HAS_EXPECTED
-#        define NOVA_SYNC_HAS_EXPECTED
-#    endif
-#    define NOVA_SYNC_HAS_TL_EXPECTED
-#    include <tl/expected.hpp>
-#endif
-
 #if defined( NOVA_SYNC_HAS_EXPECTED )
 
-#    include <cassert>
 #    include <functional>
 #    include <mutex>
 #    include <system_error>
@@ -32,54 +18,17 @@ namespace nova::sync::detail {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// @brief Invoke a handler with a successful expected<unique_lock, error_code> result.
-///
-/// Dispatches to the appropriate expected implementation (std::expected or
-/// tl::expected) based on compile-time availability. Asserts if the handler
-/// cannot be invoked with the expected type.
 template < typename Mutex, typename Handler >
 void invoke_with_lock( Handler&& handler, std::unique_lock< Mutex > lock )
 {
-#    ifdef NOVA_SYNC_HAS_STD_EXPECTED
-    using std_expected_type = std::expected< std::unique_lock< Mutex >, std::error_code >;
-    if constexpr ( std::invocable< Handler, std_expected_type > )
-        return std::invoke( handler, std_expected_type { std::move( lock ) } );
-#    endif
-#    ifdef NOVA_SYNC_HAS_TL_EXPECTED
-    using tl_expected_type = tl::expected< std::unique_lock< Mutex >, std::error_code >;
-    if constexpr ( std::invocable< Handler, tl_expected_type > )
-        return std::invoke( handler, tl_expected_type { std::move( lock ) } );
-#    endif
-
-    assert( false && "Handler must be invocable with expected<unique_lock, error_code>" );
-#    ifdef __cpp_lib_unreachable
-    std::unreachable();
-#    endif
+    invoke_handler_success< std::unique_lock< Mutex >, Handler >( std::forward< Handler >( handler ),
+                                                                  std::move( lock ) );
 }
 
-/// @brief Invoke a handler with an error expected<unique_lock, error_code> result.
-///
-/// Dispatches to the appropriate expected implementation (std::expected or
-/// tl::expected) based on compile-time availability. Asserts if the handler
-/// cannot be invoked with the expected type.
 template < typename Mutex, typename Handler >
 void invoke_with_error( Handler&& handler, std::error_code ec )
 {
-#    ifdef NOVA_SYNC_HAS_STD_EXPECTED
-    using std_expected_type = std::expected< std::unique_lock< Mutex >, std::error_code >;
-    if constexpr ( std::invocable< Handler, std_expected_type > )
-        return std::invoke( handler, std_expected_type { std::unexpect, ec } );
-#    endif
-#    ifdef NOVA_SYNC_HAS_TL_EXPECTED
-    using tl_expected_type = tl::expected< std::unique_lock< Mutex >, std::error_code >;
-    if constexpr ( std::invocable< Handler, tl_expected_type > )
-        return std::invoke( handler, tl_expected_type { tl::unexpect, ec } );
-#    endif
-
-    assert( false && "Handler must be invocable with expected<unique_lock, error_code>" );
-#    ifdef __cpp_lib_unreachable
-    std::unreachable();
-#    endif
+    invoke_handler_error< std::unique_lock< Mutex >, Handler >( std::forward< Handler >( handler ), ec );
 }
 
 template < typename Mutex, typename Handler >

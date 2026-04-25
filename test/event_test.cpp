@@ -324,14 +324,15 @@ TEMPLATE_TEST_CASE( "manual_reset_event implementations",
 
             std::thread a( [ & ] {
                 started.count_down();
-                auto t0         = clock::now();
-                acquired_in_a   = ev.try_wait_for( 10s );
-                auto elapsed_ms = std::chrono::duration_cast< std::chrono::milliseconds >( clock::now() - t0 ).count();
-                INFO( "elapsed ms = " << elapsed_ms );
-                if ( acquired_in_a ) {
-                    REQUIRE( elapsed_ms >= 3'000 );
-                    REQUIRE( elapsed_ms < 9'000 );
-                }
+                auto t0       = clock::now();
+                acquired_in_a = ev.try_wait_for( 10s );
+                auto elapsed  = clock::now() - t0;
+                INFO( "elapsed = " << elapsed );
+                // Expect wakeup after ~5s, with 2-8s margin for CI scheduling delays.
+                // Lower bound (2s) accounts for clock skew and measurement noise.
+                // Upper bound (8s) allows for significant scheduling latency on virtualized CI.
+                REQUIRE( elapsed >= 2s );
+                REQUIRE( elapsed < 8s );
             } );
 
             started.wait();
@@ -356,14 +357,13 @@ TEMPLATE_TEST_CASE( "manual_reset_event implementations",
 
             std::thread a( [ & ] {
                 started.count_down();
-                auto t0         = clock::now();
-                acquired_in_a   = ev.try_wait_until( t0 + 10s );
-                auto elapsed_ms = std::chrono::duration_cast< std::chrono::milliseconds >( clock::now() - t0 ).count();
-                INFO( "elapsed ms = " << elapsed_ms );
-                if ( acquired_in_a ) {
-                    REQUIRE( elapsed_ms >= 3'000 );
-                    REQUIRE( elapsed_ms < 9'000 );
-                }
+                auto t0       = clock::now();
+                acquired_in_a = ev.try_wait_until( t0 + 10s );
+                auto elapsed  = clock::now() - t0;
+                INFO( "elapsed = " << elapsed );
+                // Expect wakeup after ~5s, with 2-8s margin for CI scheduling delays.
+                REQUIRE( elapsed >= 2s );
+                REQUIRE( elapsed < 8s );
             } );
 
             started.wait();
@@ -388,14 +388,13 @@ TEMPLATE_TEST_CASE( "manual_reset_event implementations",
 
             std::thread a( [ & ] {
                 started.count_down();
-                auto t0         = steady::now();
-                acquired_in_a   = ev.try_wait_until( system::now() + 10s );
-                auto elapsed_ms = std::chrono::duration_cast< std::chrono::milliseconds >( steady::now() - t0 ).count();
-                INFO( "elapsed ms = " << elapsed_ms );
-                if ( acquired_in_a ) {
-                    REQUIRE( elapsed_ms >= 3'000 );
-                    REQUIRE( elapsed_ms < 9'000 );
-                }
+                auto t0       = steady::now();
+                acquired_in_a = ev.try_wait_until( system::now() + 10s );
+                auto elapsed  = steady::now() - t0;
+                INFO( "elapsed = " << elapsed );
+                // Expect wakeup after ~5s, with 2-8s margin for CI scheduling delays.
+                REQUIRE( elapsed >= 2s );
+                REQUIRE( elapsed < 8s );
             } );
 
             started.wait();
