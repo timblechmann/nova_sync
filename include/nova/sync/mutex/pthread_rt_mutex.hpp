@@ -130,28 +130,22 @@ public:
     template < class Clock, class Duration >
     bool try_lock_until( const std::chrono::time_point< Clock, Duration >& abs_time ) NOVA_SYNC_TRY_ACQUIRE( true )
     {
-        std::chrono::steady_clock::time_point steady_tp = std::chrono::time_point_cast< std::chrono::nanoseconds >(
-            std::chrono::steady_clock::now()
-            + std::chrono::duration_cast< std::chrono::nanoseconds >( abs_time - Clock::now() ) );
-        return try_lock_until( steady_tp );
-    }
+        if constexpr ( std::is_same_v< Clock, std::chrono::system_clock > ) {
+            auto ns    = std::chrono::time_point_cast< std::chrono::nanoseconds >( abs_time ).time_since_epoch();
+            auto secs  = std::chrono::duration_cast< std::chrono::seconds >( ns );
+            auto nsecs = ns - secs;
 
-    /// @brief Attempts to acquire the lock until the given steady_clock time point.
-    /// @param abs_time  Absolute deadline (steady_clock).
-    /// @return `true` if acquired, `false` if timeout or error.
-    bool try_lock_until( const std::chrono::steady_clock::time_point& abs_time ) NOVA_SYNC_TRY_ACQUIRE( true )
-    {
-        auto ns    = std::chrono::time_point_cast< std::chrono::nanoseconds >( abs_time ).time_since_epoch();
-        auto secs  = std::chrono::duration_cast< std::chrono::seconds >( ns );
-        auto nsecs = ns - secs;
+            struct timespec ts {
+                .tv_sec  = time_t( secs.count() ),
+                .tv_nsec = long( nsecs.count() ),
+            };
 
-        struct timespec ts {
-            .tv_sec  = time_t( secs.count() ),
-            .tv_nsec = long( nsecs.count() ),
-        };
-
-        int ret = pthread_mutex_timedlock( &mutex_, &ts );
-        return ret == 0;
+            int ret = pthread_mutex_timedlock( &mutex_, &ts );
+            return ret == 0;
+        } else {
+            auto timeout = abs_time - std::chrono::steady_clock::now();
+            return try_lock_until( std::chrono::system_clock::now() + timeout );
+        }
     }
 
 private:
