@@ -5,12 +5,12 @@
 
 #include <atomic>
 
-#include <nova/sync/detail/compat.hpp>
+#include <nova/sync/mutex/annotations.hpp>
 
 namespace nova::sync {
 
 /// @brief Fast mutex with spinning and park/unpark.
-class fast_mutex
+class NOVA_SYNC_CAPABILITY( "mutex" ) fast_mutex
 {
 public:
     /// @brief Constructs an unlocked fast mutex.
@@ -20,7 +20,7 @@ public:
     fast_mutex& operator=( const fast_mutex& ) = delete;
 
     /// @brief Acquires the lock, spinning and parking as necessary.
-    inline void lock() noexcept
+    inline void lock() noexcept NOVA_SYNC_ACQUIRE()
     {
         uint32_t expected = 0;
         if ( state_.compare_exchange_strong( expected, 1, std::memory_order_acquire, std::memory_order_relaxed ) )
@@ -31,14 +31,14 @@ public:
 
     /// @brief Attempts to acquire the lock without blocking.
     /// @return `true` if lock acquired, `false` if already locked.
-    [[nodiscard]] inline bool try_lock() noexcept
+    [[nodiscard]] inline bool try_lock() noexcept NOVA_SYNC_TRY_ACQUIRE( true )
     {
         uint32_t expected = 0;
         return state_.compare_exchange_strong( expected, 1, std::memory_order_acquire, std::memory_order_relaxed );
     }
 
     /// @brief Releases the lock and wakes one waiting thread if any.
-    inline void unlock() noexcept
+    inline void unlock() noexcept NOVA_SYNC_RELEASE()
     {
         uint32_t prev = state_.fetch_and( ~1, std::memory_order_release );
 

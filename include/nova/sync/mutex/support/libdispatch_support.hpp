@@ -38,6 +38,7 @@
 ///       });
 /// @endcode
 
+#include <nova/sync/mutex/annotations.hpp>
 #include <nova/sync/mutex/detail/async_support.hpp>
 
 #if defined( __APPLE__ ) && defined( NOVA_SYNC_HAS_EXPECTED )
@@ -133,7 +134,9 @@ struct dispatch_acquire_state : std::enable_shared_from_this< dispatch_acquire_s
             release_dispatch_object( src_ );
     }
 
-    void start()
+    // Async acquire: lock ownership is transferred to the lambda/handler,
+    // so the analyzer cannot track it across the dispatch boundary.
+    NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS void start()
     {
         // Try fast path first
         if ( mtx_.try_lock() ) {
@@ -200,7 +203,9 @@ struct dispatch_acquire_cancellable_state :
             release_dispatch_object( src_ );
     }
 
-    void start()
+    // Async acquire: lock ownership is transferred across dispatch boundaries;
+    // the analyzer cannot track it, so we opt out here.
+    NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS void start()
     {
         // Install cancellation callback to actively cancel the source
         cancel_state_->cancellation_callback_ = [ self = this->shared_from_this() ] {
@@ -246,7 +251,8 @@ struct dispatch_acquire_cancellable_state :
         src_ = dispatch_source_create( DISPATCH_SOURCE_TYPE_READ, uintptr_t( mtx_.native_handle() ), 0, queue_ );
 
         // Set the event handler - tries to acquire on each event
-        dispatch_source_set_event_handler( src_, [ self = this->shared_from_this() ] {
+        dispatch_source_set_event_handler( src_,
+                                           [ self = this->shared_from_this() ]() NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS {
             if ( self->cancel_state_->is_cancelled() ) {
                 // Cancelled: release source and deliver error
                 if ( self->cancel_state_->try_mark_invoked() ) {
@@ -461,7 +467,8 @@ struct dispatch_acquire_future_state
 };
 
 template < typename Mutex >
-dispatch_acquire_future_state< Mutex > async_acquire( Mutex& mtx, dispatch_queue_t queue )
+NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS dispatch_acquire_future_state< Mutex > async_acquire( Mutex&           mtx,
+                                                                                          dispatch_queue_t queue )
     requires concepts::native_async_mutex< Mutex >
 {
     using promise_t = std::promise< std::unique_lock< Mutex > >;

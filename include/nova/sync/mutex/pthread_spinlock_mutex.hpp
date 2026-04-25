@@ -10,12 +10,12 @@
 #    endif
 #endif
 
-#include <nova/sync/detail/compat.hpp>
+#include <nova/sync/mutex/annotations.hpp>
 
 namespace nova::sync {
 
 #ifdef NOVA_SYNC_HAS_PTHREAD_SPINLOCK
-class pthread_spinlock_mutex
+class NOVA_SYNC_CAPABILITY( "mutex" ) pthread_spinlock_mutex
 {
     pthread_spinlock_t lock_;
 
@@ -33,17 +33,17 @@ public:
     pthread_spinlock_mutex( const pthread_spinlock_mutex& )            = delete;
     pthread_spinlock_mutex& operator=( const pthread_spinlock_mutex& ) = delete;
 
-    void lock() noexcept
+    void lock() noexcept NOVA_SYNC_ACQUIRE()
     {
         pthread_spin_lock( &lock_ );
     }
 
-    [[nodiscard]] bool try_lock() noexcept
+    [[nodiscard]] bool try_lock() noexcept NOVA_SYNC_TRY_ACQUIRE( true )
     {
         return pthread_spin_trylock( &lock_ ) == 0;
     }
 
-    void unlock() noexcept
+    void unlock() noexcept NOVA_SYNC_RELEASE()
     {
         pthread_spin_unlock( &lock_ );
     }

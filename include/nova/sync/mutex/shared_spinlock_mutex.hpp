@@ -5,12 +5,12 @@
 
 #include <atomic>
 
-#include <nova/sync/detail/compat.hpp>
+#include <nova/sync/mutex/annotations.hpp>
 
 namespace nova::sync {
 
 /// @brief Spinlock-based shared mutex.
-class shared_spinlock_mutex
+class NOVA_SYNC_CAPABILITY( "mutex" ) shared_spinlock_mutex
 {
     // 32-bit State Bitmask Layout:
     // Bit 31: Exclusive Write Lock Active
@@ -29,7 +29,7 @@ public:
     shared_spinlock_mutex& operator=( const shared_spinlock_mutex& ) = delete;
 
     /// @brief Acquires the exclusive write lock.
-    void lock() noexcept
+    void lock() noexcept NOVA_SYNC_ACQUIRE()
     {
         uint32_t expected = 0;
         if ( state_.compare_exchange_strong(
@@ -41,7 +41,7 @@ public:
 
     /// @brief Attempts to acquire the exclusive write lock without blocking.
     /// @return `true` if lock acquired, `false` if already locked or readers present.
-    [[nodiscard]] bool try_lock() noexcept
+    [[nodiscard]] bool try_lock() noexcept NOVA_SYNC_TRY_ACQUIRE( true )
     {
         uint32_t expected = state_.load( std::memory_order_relaxed );
 
@@ -56,13 +56,13 @@ public:
     }
 
     /// @brief Releases the exclusive write lock and wakes waiting readers.
-    void unlock() noexcept
+    void unlock() noexcept NOVA_SYNC_RELEASE()
     {
         state_.fetch_and( ~write_locked, std::memory_order_release );
     }
 
     /// @brief Acquires a shared read lock (allows concurrent readers).
-    void lock_shared() noexcept
+    void lock_shared() noexcept NOVA_SYNC_ACQUIRE_SHARED()
     {
         uint32_t expected = state_.load( std::memory_order_relaxed );
 
@@ -76,7 +76,7 @@ public:
 
     /// @brief Attempts to acquire a shared read lock without blocking.
     /// @return `true` if lock acquired, `false` if writer or pending writer present.
-    bool try_lock_shared() noexcept
+    [[nodiscard]] bool try_lock_shared() noexcept NOVA_SYNC_TRY_ACQUIRE_SHARED( true )
     {
         uint32_t expected = state_.load( std::memory_order_relaxed );
         if ( ( expected & ( write_locked | write_pending ) ) == 0 ) {
@@ -89,7 +89,7 @@ public:
     }
 
     /// @brief Releases a shared read lock.
-    void unlock_shared() noexcept
+    void unlock_shared() noexcept NOVA_SYNC_RELEASE_SHARED()
     {
         state_.fetch_sub( 1, std::memory_order_release );
     }

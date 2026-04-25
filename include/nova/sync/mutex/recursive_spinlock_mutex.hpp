@@ -6,13 +6,13 @@
 #include <atomic>
 #include <thread>
 
-#include <nova/sync/detail/compat.hpp>
+#include <nova/sync/mutex/annotations.hpp>
 #include <nova/sync/mutex/concepts.hpp>
 
 namespace nova::sync {
 
 /// @brief Recursive spinlock-based mutex.
-class recursive_spinlock_mutex
+class NOVA_SYNC_CAPABILITY( "mutex" ) NOVA_SYNC_REENTRANT_CAPABILITY recursive_spinlock_mutex
 {
     std::atomic< std::thread::id > owner_ { std::thread::id {} };
     std::size_t                    recursion_count_ { 0 };
@@ -24,7 +24,7 @@ public:
     recursive_spinlock_mutex& operator=( const recursive_spinlock_mutex& ) = delete;
 
     /// @brief Acquires the lock, allowing recursion from the current owner.
-    void lock() noexcept
+    void lock() noexcept NOVA_SYNC_ACQUIRE()
     {
         const std::thread::id tid = std::this_thread::get_id();
         std::thread::id       expected {};
@@ -44,7 +44,7 @@ public:
 
     /// @brief Attempts to acquire the lock without blocking.
     /// @return `true` if lock acquired or already owned by current thread, `false` otherwise.
-    [[nodiscard]] bool try_lock() noexcept
+    [[nodiscard]] bool try_lock() noexcept NOVA_SYNC_TRY_ACQUIRE( true )
     {
         const std::thread::id tid = std::this_thread::get_id();
         std::thread::id       expected {};
@@ -64,7 +64,7 @@ public:
 
     /// @brief Releases the lock (decrements recursion depth).
     /// @details Lock is fully released when recursion depth reaches zero.
-    void unlock() noexcept
+    void unlock() noexcept NOVA_SYNC_RELEASE()
     {
         if ( --recursion_count_ == 0 )
             owner_.store( std::thread::id {}, std::memory_order_release );

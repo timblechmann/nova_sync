@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <nova/sync/mutex/annotations.hpp>
 #include <nova/sync/mutex/concepts.hpp>
 #include <nova/sync/mutex/support/async_waiter_guard.hpp>
 

@@ -41,6 +41,7 @@ set(headers
     include/nova/sync/detail/compat.hpp
     include/nova/sync/detail/syscall.hpp
     include/nova/sync/detail/timed_wait.hpp
+    include/nova/sync/mutex/annotations.hpp
     include/nova/sync/mutex/apple_os_unfair_mutex.hpp
     include/nova/sync/mutex/concepts.hpp
     include/nova/sync/mutex/detail/async_support.hpp
@@ -98,9 +99,26 @@ target_include_directories(nova_sync PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 
+include(CMakeDependentOption)
+cmake_dependent_option(
+    NOVA_SYNC_THREAD_SAFETY_ANALYSIS
+    "Enable Clang thread-safety analysis (passes -Wthread-safety)"
+    OFF
+    "CMAKE_CXX_COMPILER_ID MATCHES Clang OR CMAKE_CXX_COMPILER_ID MATCHES AppleClang"
+    OFF
+)
+
+if (NOVA_SYNC_THREAD_SAFETY_ANALYSIS)
+    target_compile_options(nova_sync PUBLIC -Wthread-safety)
+endif()
+
+
+
 # Testing
 option(NOVA_SYNC_TESTS "Build unit tests" ${PROJECT_IS_TOP_LEVEL})
 if(NOVA_SYNC_TESTS)
+    set(CMAKE_FOLDER "tests")
+
     if (NOT TARGET Catch2::Catch2WithMain)
         nova_sync_install_pmr()
         block()
@@ -145,6 +163,7 @@ if(NOVA_SYNC_TESTS)
         test/mutex_test.cpp
         test/mutex_benchmarks.cpp
         test/mutex_async_asio_test.cpp
+        test/mutex_thread_safety_test.cpp
     )
 
     if(APPLE)
@@ -163,6 +182,10 @@ if(NOVA_SYNC_TESTS)
     target_link_libraries(nova_sync_tests PRIVATE Boost::asio)
     target_link_libraries(nova_sync_tests PRIVATE tl::expected)
 
+    if (NOVA_SYNC_THREAD_SAFETY_ANALYSIS)
+        set_target_properties(nova_sync_tests PROPERTIES COMPILE_WARNING_AS_ERROR ON)
+    endif()
+
     # for benchmarking QMutex
     find_package(Qt6 COMPONENTS Core QUIET)
     if(TARGET Qt6::Core)
@@ -173,6 +196,31 @@ if(NOVA_SYNC_TESTS)
 
     enable_testing()
     add_test(NAME nova_sync_tests COMMAND nova_sync_tests)
+
+    # ---------------------------------------------------------------------------
+    # Negative compile tests — expected NOT to compile.
+    # These are excluded from ALL (not built by default) and must be built
+    # explicitly, e.g.:  cmake --build build --target nova_sync_negative_tests
+    #
+    # They are only meaningful when NOVA_SYNC_THREAD_SAFETY_ANALYSIS is ON
+    # so they depend on that option.
+    # ---------------------------------------------------------------------------
+    if (NOVA_SYNC_THREAD_SAFETY_ANALYSIS)
+        foreach(_neg_test
+            requires_without_lock
+            guarded_by_without_lock
+            excludes_while_holding
+            pt_guarded_by_without_lock
+        )
+            add_executable(nova_sync_neg_${_neg_test} EXCLUDE_FROM_ALL
+                test/negative/${_neg_test}.cpp
+            )
+            target_link_libraries(nova_sync_neg_${_neg_test} PRIVATE nova::sync)
+            target_compile_options(nova_sync_neg_${_neg_test} PRIVATE
+                -Wthread-safety -Werror=thread-safety-analysis
+            )
+        endforeach()
+    endif()
 endif()
 
 # Installation

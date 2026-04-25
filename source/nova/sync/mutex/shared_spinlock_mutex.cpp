@@ -4,6 +4,7 @@
 #include <nova/sync/mutex/shared_spinlock_mutex.hpp>
 
 #include <nova/sync/detail/backoff.hpp>
+#include <nova/sync/detail/compat.hpp>
 
 namespace nova::sync {
 

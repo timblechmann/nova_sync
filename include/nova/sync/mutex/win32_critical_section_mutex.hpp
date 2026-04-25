@@ -10,14 +10,14 @@
 
 #ifdef NOVA_SYNC_HAS_WIN32_CRITICAL_SECTION_MUTEX
 
-#    include <nova/sync/detail/compat.hpp>
+#    include <nova/sync/mutex/annotations.hpp>
 #    include <nova/sync/mutex/concepts.hpp>
 
 namespace nova::sync {
 
 /// @brief Recursive mutex implemented using Win32 CRITICAL_SECTION.
 ///
-class win32_critical_section_mutex
+class NOVA_SYNC_CAPABILITY( "mutex" ) NOVA_SYNC_REENTRANT_CAPABILITY win32_critical_section_mutex
 {
 public:
     /// @brief Constructs and initialises the CRITICAL_SECTION with a spin count.
@@ -31,15 +31,15 @@ public:
 
     /// @brief Acquires the lock, spinning then blocking as necessary.
     ///        Re-entrant: safe to call from the already-owning thread.
-    void lock() noexcept;
+    void lock() noexcept NOVA_SYNC_ACQUIRE();
 
     /// @brief Attempts to acquire the lock without blocking.
     /// @return `true` if the lock was acquired (including recursive re-entry),
     ///         `false` if another thread currently holds it.
-    [[nodiscard]] bool try_lock() noexcept;
+    [[nodiscard]] bool try_lock() noexcept NOVA_SYNC_TRY_ACQUIRE( true );
 
     /// @brief Releases one level of recursion; fully unlocks when count reaches zero.
-    void unlock() noexcept;
+    void unlock() noexcept NOVA_SYNC_RELEASE();
 
 private:
     static constexpr unsigned storage_size  = 48;

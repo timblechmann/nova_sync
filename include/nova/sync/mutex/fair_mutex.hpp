@@ -6,12 +6,13 @@
 #include <atomic>
 
 #include <nova/sync/detail/compat.hpp>
+#include <nova/sync/mutex/annotations.hpp>
 
 namespace nova::sync {
 
 /// @brief Fair mutex.
 /// @details Uses a ticket lock algorithm to ensure FIFO fairness.
-class fair_mutex
+class NOVA_SYNC_CAPABILITY( "mutex" ) fair_mutex
 {
 public:
     /// @brief Constructs an unlocked fair mutex.
@@ -21,7 +22,7 @@ public:
     fair_mutex& operator=( const fair_mutex& ) = delete;
 
     /// @brief Acquires the lock in FIFO order.
-    inline void lock() noexcept
+    inline void lock() noexcept NOVA_SYNC_ACQUIRE()
     {
         uint32_t my_ticket = next_ticket_.fetch_add( 1, std::memory_order_seq_cst );
 
@@ -33,7 +34,7 @@ public:
 
     /// @brief Attempts to acquire the lock without waiting.
     /// @return `true` if lock acquired, `false` if already locked.
-    [[nodiscard]] inline bool try_lock() noexcept
+    [[nodiscard]] inline bool try_lock() noexcept NOVA_SYNC_TRY_ACQUIRE( true )
     {
         uint32_t current_serving = serving_ticket_.load( std::memory_order_acquire );
         uint32_t expected        = current_serving;
@@ -45,7 +46,7 @@ public:
     }
 
     /// @brief Releases the lock and serves the next waiting thread.
-    inline void unlock() noexcept
+    inline void unlock() noexcept NOVA_SYNC_RELEASE()
     {
         uint32_t next_serving = serving_ticket_.load( std::memory_order_relaxed ) + 1;
 

@@ -14,6 +14,7 @@
 #    include <chrono>
 #    include <nova/sync/detail/compat.hpp>
 #    include <nova/sync/detail/timed_wait.hpp>
+#    include <nova/sync/mutex/annotations.hpp>
 #    include <nova/sync/mutex/support/async_waiter_guard.hpp>
 
 namespace nova::sync {
@@ -39,7 +40,7 @@ namespace nova::sync {
 ///   }
 /// @endcode
 ///
-class kqueue_mutex
+class NOVA_SYNC_CAPABILITY( "mutex" ) kqueue_mutex
 {
 public:
     /// @brief The native handle type — a POSIX file descriptor.
@@ -54,16 +55,16 @@ public:
     kqueue_mutex& operator=( const kqueue_mutex& ) = delete;
 
     /// @brief Acquires the lock, blocking as necessary.
-    void lock() noexcept;
+    void lock() noexcept NOVA_SYNC_ACQUIRE();
 
     /// @brief Attempts to acquire the lock without blocking.
     /// @return `true` if lock acquired, `false` if already locked.
-    [[nodiscard]] bool try_lock() noexcept;
+    [[nodiscard]] bool try_lock() noexcept NOVA_SYNC_TRY_ACQUIRE( true );
 
     /// @brief Attempts to acquire the lock, blocking for up to @p rel_ns nanoseconds.
     ///
     /// @return `true` if the lock was acquired, `false` if the duration expired.
-    bool try_lock_for( duration_type rel_ns ) noexcept
+    bool try_lock_for( duration_type rel_ns ) noexcept NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS
     {
         if ( rel_ns.count() <= 0 )
             return try_lock();
@@ -81,7 +82,7 @@ public:
     ///
     /// @return `true` if the lock was acquired, `false` if the duration expired.
     template < class Rep, class Period >
-    bool try_lock_for( const std::chrono::duration< Rep, Period >& rel_time )
+    bool try_lock_for( const std::chrono::duration< Rep, Period >& rel_time ) NOVA_SYNC_TRY_ACQUIRE( true )
     {
         return try_lock_for( std::chrono::duration_cast< duration_type >( rel_time ) );
     }
@@ -90,7 +91,7 @@ public:
     ///
     /// @return `true` if the lock was acquired, `false` if the deadline expired.
     template < class Clock, class Duration >
-    bool try_lock_until( const std::chrono::time_point< Clock, Duration >& abs_time )
+    bool try_lock_until( const std::chrono::time_point< Clock, Duration >& abs_time ) NOVA_SYNC_TRY_ACQUIRE( true )
     {
         if ( try_lock() )
             return true;
@@ -108,7 +109,7 @@ public:
     }
 
     /// @brief Releases the lock and wakes one waiting thread if any.
-    void unlock() noexcept;
+    void unlock() noexcept NOVA_SYNC_RELEASE();
 
     /// @brief Returns the kqueue file descriptor for async integration.
     ///
@@ -155,7 +156,7 @@ private:
 ///   }
 /// @endcode
 ///
-class alignas( detail::hardware_destructive_interference_size ) fast_kqueue_mutex
+class alignas( detail::hardware_destructive_interference_size ) NOVA_SYNC_CAPABILITY( "mutex" ) fast_kqueue_mutex
 {
 public:
     /// @brief The native handle type — a POSIX file descriptor.
@@ -170,7 +171,7 @@ public:
     fast_kqueue_mutex& operator=( const fast_kqueue_mutex& ) = delete;
 
     /// @brief Acquires the lock, blocking as necessary.
-    void lock() noexcept
+    void lock() noexcept NOVA_SYNC_ACQUIRE()
     {
         uint32_t expected = 0;
         if ( state_.compare_exchange_weak( expected, 1u, std::memory_order_acquire, std::memory_order_relaxed ) )
@@ -180,7 +181,7 @@ public:
 
     /// @brief Attempts to acquire the lock without blocking.
     /// @return `true` if lock acquired, `false` if already locked.
-    [[nodiscard]] bool try_lock() noexcept
+    [[nodiscard]] bool try_lock() noexcept NOVA_SYNC_TRY_ACQUIRE( true )
     {
         uint32_t s = state_.load( std::memory_order_relaxed );
         while ( ( s & 1u ) == 0 ) {
@@ -191,7 +192,7 @@ public:
     }
 
     /// @brief Releases the lock and wakes one waiting thread if any.
-    void unlock() noexcept;
+    void unlock() noexcept NOVA_SYNC_RELEASE();
 
     /// @brief Attempts to acquire the lock, blocking for up to @p rel_time.
     ///
@@ -200,7 +201,7 @@ public:
     ///
     /// @return `true` if the lock was acquired, `false` if the duration expired.
     template < class Rep, class Period >
-    bool try_lock_for( const std::chrono::duration< Rep, Period >& rel_time )
+    bool try_lock_for( const std::chrono::duration< Rep, Period >& rel_time ) NOVA_SYNC_TRY_ACQUIRE( true )
     {
         return try_lock_for_impl( rel_time );
     }
@@ -214,7 +215,7 @@ public:
     ///
     /// @return `true` if the lock was acquired, `false` if the deadline expired.
     template < class Clock, class Duration >
-    bool try_lock_until( const std::chrono::time_point< Clock, Duration >& abs_time )
+    bool try_lock_until( const std::chrono::time_point< Clock, Duration >& abs_time ) NOVA_SYNC_TRY_ACQUIRE( true )
     {
         if ( try_lock() )
             return true;

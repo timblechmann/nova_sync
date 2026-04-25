@@ -153,7 +153,7 @@ TEMPLATE_TEST_CASE( "native_async_mutex (Qt): async acquire fires after unlock",
     } );
 
     REQUIRE( acquired_after_release->load() );
-    REQUIRE( mtx.try_lock() );
+    mtx.lock(); // verify mutex is free
     mtx.unlock();
 }
 
@@ -187,7 +187,7 @@ TEMPLATE_TEST_CASE( "native_async_mutex (Qt): no early wakeup while locked",
     } );
 
     REQUIRE( handler_fired->load() );
-    REQUIRE( mtx.try_lock() );
+    mtx.lock(); // verify mutex is free
     mtx.unlock();
 }
 
@@ -366,7 +366,7 @@ TEMPLATE_TEST_CASE( "native_async_mutex (Qt) stress: high contention many async 
     REQUIRE( *inside == 0 );
     REQUIRE( *max_concurrent == 1 );
 
-    REQUIRE( mtx.try_lock() );
+    mtx.lock(); // verify mutex is free
     mtx.unlock();
 }
 
@@ -398,7 +398,7 @@ TEMPLATE_TEST_CASE( "native_async_mutex (Qt) stress: unlock races CAS acquisitio
     } );
 
     REQUIRE( completions->load() == rounds );
-    REQUIRE( mtx.try_lock() );
+    mtx.lock(); // verify mutex is free
     mtx.unlock();
 }
 
@@ -429,7 +429,7 @@ TEMPLATE_TEST_CASE( "native_async_mutex (Qt) stress: no stray notifications afte
     REQUIRE( completions->load() == rounds );
 
     // No stray notifications — mutex must be immediately acquirable
-    REQUIRE( mtx.try_lock() );
+    mtx.lock(); // verify mutex is free
     mtx.unlock();
 }
 

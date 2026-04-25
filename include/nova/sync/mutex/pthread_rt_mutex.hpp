@@ -18,6 +18,7 @@
 #    include <stdexcept>
 
 #    include <nova/sync/detail/compat.hpp>
+#    include <nova/sync/mutex/annotations.hpp>
 
 namespace nova::sync {
 
@@ -64,7 +65,7 @@ struct priority_ceiling
 /// @tparam Policy  One of `pthread_mutex_policy::priority_ceiling` or
 ///                 `pthread_mutex_policy::priority_inherit`.
 template < pthread_mutex_policy Policy >
-class pthread_rt_mutex
+class NOVA_SYNC_CAPABILITY( "mutex" ) pthread_rt_mutex
 {
     pthread_mutex_t mutex_ = PTHREAD_MUTEX_INITIALIZER;
 
@@ -96,20 +97,20 @@ public:
     pthread_rt_mutex& operator=( const pthread_rt_mutex& ) = delete;
 
     /// @brief Acquires the lock, blocking until available.
-    void lock()
+    void lock() NOVA_SYNC_ACQUIRE()
     {
         pthread_mutex_lock( &mutex_ );
     }
 
     /// @brief Attempts to acquire the lock without blocking.
     /// @return `true` if acquired, `false` if already locked.
-    [[nodiscard]] bool try_lock() noexcept
+    [[nodiscard]] bool try_lock() noexcept NOVA_SYNC_TRY_ACQUIRE( true )
     {
         return pthread_mutex_trylock( &mutex_ ) == 0;
     }
 
     /// @brief Releases the lock.
-    void unlock() noexcept
+    void unlock() noexcept NOVA_SYNC_RELEASE()
     {
         pthread_mutex_unlock( &mutex_ );
     }
@@ -118,7 +119,7 @@ public:
     /// @param rel_time  Maximum duration to wait.
     /// @return `true` if acquired, `false` if timeout or error.
     template < class Rep, class Period >
-    bool try_lock_for( const std::chrono::duration< Rep, Period >& rel_time )
+    bool try_lock_for( const std::chrono::duration< Rep, Period >& rel_time ) NOVA_SYNC_TRY_ACQUIRE( true )
     {
         return try_lock_until( std::chrono::steady_clock::now() + rel_time );
     }
@@ -127,7 +128,7 @@ public:
     /// @param abs_time  Absolute deadline.
     /// @return `true` if acquired, `false` if timeout or error.
     template < class Clock, class Duration >
-    bool try_lock_until( const std::chrono::time_point< Clock, Duration >& abs_time )
+    bool try_lock_until( const std::chrono::time_point< Clock, Duration >& abs_time ) NOVA_SYNC_TRY_ACQUIRE( true )
     {
         std::chrono::steady_clock::time_point steady_tp = std::chrono::time_point_cast< std::chrono::nanoseconds >(
             std::chrono::steady_clock::now()
@@ -138,7 +139,7 @@ public:
     /// @brief Attempts to acquire the lock until the given steady_clock time point.
     /// @param abs_time  Absolute deadline (steady_clock).
     /// @return `true` if acquired, `false` if timeout or error.
-    bool try_lock_until( const std::chrono::steady_clock::time_point& abs_time )
+    bool try_lock_until( const std::chrono::steady_clock::time_point& abs_time ) NOVA_SYNC_TRY_ACQUIRE( true )
     {
         auto ns    = std::chrono::time_point_cast< std::chrono::nanoseconds >( abs_time ).time_since_epoch();
         auto secs  = std::chrono::duration_cast< std::chrono::seconds >( ns );

@@ -36,6 +36,7 @@
 ///       });
 /// @endcode
 
+#include <nova/sync/mutex/annotations.hpp>
 #include <nova/sync/mutex/detail/async_support.hpp>
 
 #if defined( NOVA_SYNC_HAS_EXPECTED ) && __has_include( <QCoreApplication> )
@@ -117,7 +118,9 @@ struct qt_acquire_op : std::enable_shared_from_this< qt_acquire_op< Mutex, Handl
         delete_notifier( notifier_ );
     }
 
-    void start()
+    // Async acquire: lock ownership is transferred to the handler via Qt's
+    // event loop; the analyzer cannot track it across that boundary.
+    NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS void start()
     {
         if ( mtx_.try_lock() ) {
             deliver_success();
@@ -156,7 +159,7 @@ private:
         notifier_->setEnabled( true );
     }
 
-    void on_notified()
+    void on_notified() NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS
     {
         if ( notifier_ )
             notifier_->setEnabled( false );
@@ -219,7 +222,9 @@ struct qt_acquire_cancellable_op : std::enable_shared_from_this< qt_acquire_canc
         } );
     }
 
-    void start()
+    // Async acquire: lock ownership is transferred across Qt's event loop;
+    // the analyzer cannot track it, so we opt out here.
+    NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS void start()
     {
         if ( is_cancelled() ) {
             deliver_cancellation();
@@ -295,7 +300,7 @@ private:
         notifier_->setEnabled( true );
     }
 
-    void on_notified()
+    void on_notified() NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS
     {
         if ( notifier_ )
             notifier_->setEnabled( false );
@@ -474,6 +479,7 @@ auto qt_async_acquire_cancellable( Mutex& mtx, QObject* context, Handler&& handl
 template < typename Mutex >
 std::future< std::unique_lock< Mutex > > qt_async_acquire( Mutex& mtx, QObject* context )
     requires concepts::native_async_mutex< Mutex >
+NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS
 {
     using promise_t = std::promise< std::unique_lock< Mutex > >;
 

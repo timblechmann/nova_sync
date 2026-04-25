@@ -5,12 +5,12 @@
 
 #include <atomic>
 
-#include <nova/sync/detail/compat.hpp>
+#include <nova/sync/mutex/annotations.hpp>
 
 namespace nova::sync {
 
 /// @brief Spinlock-based mutex.
-class spinlock_mutex
+class NOVA_SYNC_CAPABILITY( "mutex" ) spinlock_mutex
 {
     std::atomic< bool > locked_ { false };
 
@@ -23,7 +23,7 @@ public:
     spinlock_mutex& operator=( const spinlock_mutex& ) = delete;
 
     /// @brief Acquires the lock, spinning if necessary.
-    void lock() noexcept
+    void lock() noexcept NOVA_SYNC_ACQUIRE()
     {
         if ( !locked_.exchange( true, std::memory_order_acquire ) )
             return;
@@ -33,7 +33,7 @@ public:
 
     /// @brief Tries to acquire the lock without spinning.
     /// @return true if the lock was successfully acquired, false otherwise.
-    [[nodiscard]] bool try_lock() noexcept
+    [[nodiscard]] bool try_lock() noexcept NOVA_SYNC_TRY_ACQUIRE( true )
     {
         if ( locked_.load( std::memory_order_relaxed ) )
             return false;
@@ -42,7 +42,7 @@ public:
     }
 
     /// @brief Releases the lock.
-    void unlock() noexcept
+    void unlock() noexcept NOVA_SYNC_RELEASE()
     {
         locked_.store( false, std::memory_order_release );
     }

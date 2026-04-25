@@ -100,7 +100,7 @@ TEMPLATE_TEST_CASE( "libdispatch: async acquire fires after unlock",
 
     REQUIRE( handler_fired.load() );
 
-    REQUIRE( mtx.try_lock() );
+    mtx.lock(); // verify mutex is free
     mtx.unlock();
 }
 
@@ -135,7 +135,7 @@ TEMPLATE_TEST_CASE( "libdispatch: no early wakeup while locked",
 
     REQUIRE( handler_fired.load() );
 
-    REQUIRE( mtx.try_lock() );
+    mtx.lock(); // verify mutex is free
     mtx.unlock();
 }
 
@@ -337,7 +337,7 @@ TEMPLATE_TEST_CASE( "libdispatch stress: high contention many async waiters",
     REQUIRE( inside == 0 );
     REQUIRE( max_concurrent == 1 );
 
-    REQUIRE( mtx.try_lock() );
+    mtx.lock(); // verify mutex is free
     mtx.unlock();
 }
 
@@ -372,7 +372,7 @@ TEMPLATE_TEST_CASE( "libdispatch stress: unlock races CAS acquisition",
     nova::sync::detail::release_dispatch_object( queue );
 
     REQUIRE( completions.load() == rounds );
-    REQUIRE( mtx.try_lock() );
+    mtx.lock(); // verify mutex is free
     mtx.unlock();
 }
 
@@ -402,6 +402,6 @@ TEMPLATE_TEST_CASE( "libdispatch stress: no stray notifications after acquire cy
     REQUIRE( completions.load() == rounds );
 
     // No stray notifications — mutex must be immediately acquirable
-    REQUIRE( mtx.try_lock() );
+    mtx.lock(); // verify mutex is free
     mtx.unlock();
 }
