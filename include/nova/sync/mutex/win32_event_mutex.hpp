@@ -39,7 +39,7 @@ public:
 
     /// @brief Attempts to acquire the lock without blocking.
     /// @return `true` if lock acquired, `false` if already locked.
-    bool try_lock() noexcept;
+    [[nodiscard]] bool try_lock() noexcept;
 
     /// @brief Attempts to acquire the lock, blocking for up to @p rel_ms milliseconds.
     ///

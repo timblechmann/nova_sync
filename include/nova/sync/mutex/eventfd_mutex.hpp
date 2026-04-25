@@ -62,7 +62,7 @@ public:
 
     /// @brief Attempts to acquire the lock without blocking.
     /// @return `true` if lock acquired, `false` if already locked.
-    bool try_lock() noexcept;
+    [[nodiscard]] bool try_lock() noexcept;
 
     /// @brief Attempts to acquire the lock, blocking for up to @p rel_ns nanoseconds.
     ///
@@ -173,7 +173,7 @@ public:
 
     /// @brief Attempts to acquire the lock without blocking.
     /// @return `true` if lock acquired, `false` if already locked.
-    bool try_lock() noexcept
+    [[nodiscard]] bool try_lock() noexcept
     {
         uint32_t s = state_.load( std::memory_order_relaxed );
         while ( ( s & 1u ) == 0 ) {

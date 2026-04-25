@@ -44,7 +44,7 @@ public:
 
     /// @brief Attempts to acquire the lock without blocking.
     /// @return `true` if lock acquired or already owned by current thread, `false` otherwise.
-    bool try_lock() noexcept
+    [[nodiscard]] bool try_lock() noexcept
     {
         const std::thread::id tid = std::this_thread::get_id();
         std::thread::id       expected {};

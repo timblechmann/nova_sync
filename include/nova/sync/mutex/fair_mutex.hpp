@@ -33,7 +33,7 @@ public:
 
     /// @brief Attempts to acquire the lock without waiting.
     /// @return `true` if lock acquired, `false` if already locked.
-    inline bool try_lock() noexcept
+    [[nodiscard]] inline bool try_lock() noexcept
     {
         uint32_t current_serving = serving_ticket_.load( std::memory_order_acquire );
         uint32_t expected        = current_serving;

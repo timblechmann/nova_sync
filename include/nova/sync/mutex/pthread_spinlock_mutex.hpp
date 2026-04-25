@@ -38,7 +38,7 @@ public:
         pthread_spin_lock( &lock_ );
     }
 
-    bool try_lock() noexcept
+    [[nodiscard]] bool try_lock() noexcept
     {
         return pthread_spin_trylock( &lock_ ) == 0;
     }
