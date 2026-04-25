@@ -4,11 +4,11 @@
 #pragma once
 
 #if defined( __x86_64__ ) || defined( _M_X64 )
-#    include <immintrin.h>
+#  include <immintrin.h>
 #endif
 
 #ifdef _MSC_VER
-#    include <intrin.h>
+#  include <intrin.h>
 #endif
 
 namespace nova::sync::detail {

@@ -6,11 +6,11 @@
 #include <chrono>
 
 #if __has_include( <unistd.h> ) && __has_include( <poll.h> ) && __has_include( <errno.h> )
-#    include <cstddef>
-#    include <errno.h>
-#    include <poll.h>
-#    include <sys/types.h>
-#    include <unistd.h>
+#  include <cstddef>
+#  include <errno.h>
+#  include <poll.h>
+#  include <sys/types.h>
+#  include <unistd.h>
 
 namespace nova::sync::detail {
 

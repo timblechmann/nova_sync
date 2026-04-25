@@ -5,9 +5,9 @@
 
 #ifdef NOVA_SYNC_HAS_APPLE_OS_UNFAIR_MUTEX
 
-#    include <os/lock.h>
+#  include <os/lock.h>
 
-#    include <cstring>
+#  include <cstring>
 
 static_assert( sizeof( os_unfair_lock ) == sizeof( unsigned int ),
                "os_unfair_lock size mismatch with unsigned int storage" );

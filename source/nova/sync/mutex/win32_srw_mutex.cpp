@@ -5,7 +5,7 @@
 
 #ifdef NOVA_SYNC_HAS_WIN32_SRW_MUTEX
 
-#    include <windows.h>
+#  include <windows.h>
 
 namespace nova::sync {
 

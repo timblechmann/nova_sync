@@ -3,19 +3,19 @@
 
 #ifdef NOVA_SYNC_HAS_QT
 
-#    include <catch2/catch_all.hpp>
+#  include <catch2/catch_all.hpp>
 
-#    include "event_types.hpp"
+#  include "event_types.hpp"
 
-#    include <nova/sync/event/support/qt_support.hpp>
+#  include <nova/sync/event/support/qt_support.hpp>
 
-#    include <atomic>
-#    include <chrono>
-#    include <memory>
-#    include <system_error>
-#    include <thread>
+#  include <atomic>
+#  include <chrono>
+#  include <memory>
+#  include <system_error>
+#  include <thread>
 
-#    include <QtCore/QCoreApplication>
+#  include <QtCore/QCoreApplication>
 
 using namespace std::chrono_literals;
 

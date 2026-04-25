@@ -12,47 +12,47 @@
 
 #if __has_include( <boost/asio.hpp>) && defined( NOVA_SYNC_HAS_EXPECTED )
 
-#    include <future>
-#    include <memory>
-#    include <mutex>
-#    include <system_error>
+#  include <future>
+#  include <memory>
+#  include <mutex>
+#  include <system_error>
 
-#    include <boost/asio/dispatch.hpp>
-#    include <boost/asio/io_context.hpp>
+#  include <boost/asio/dispatch.hpp>
+#  include <boost/asio/io_context.hpp>
 
-#    include <nova/sync/detail/syscall.hpp>
-#    include <nova/sync/mutex/detail/async_support.hpp>
+#  include <nova/sync/detail/syscall.hpp>
+#  include <nova/sync/mutex/detail/async_support.hpp>
 
-#    if defined( __linux__ ) || defined( __APPLE__ )
-#        include <boost/asio/posix/stream_descriptor.hpp>
-#    elif defined( _WIN32 )
-#        include <boost/asio/windows/object_handle.hpp>
-#    endif
+#  if defined( __linux__ ) || defined( __APPLE__ )
+#    include <boost/asio/posix/stream_descriptor.hpp>
+#  elif defined( _WIN32 )
+#    include <boost/asio/windows/object_handle.hpp>
+#  endif
 
 namespace nova::sync {
 
 
 namespace detail {
 
-#    if defined( __linux__ ) || defined( __APPLE__ )
+#  if defined( __linux__ ) || defined( __APPLE__ )
 using native_stream_descriptor = boost::asio::posix::stream_descriptor;
-#    elif defined( _WIN32 )
+#  elif defined( _WIN32 )
 using native_stream_descriptor = boost::asio::windows::object_handle;
-#    endif
+#  endif
 
-#    if defined( __linux__ ) || defined( __APPLE__ )
+#  if defined( __linux__ ) || defined( __APPLE__ )
 template < typename Handler >
 auto async_wait( boost::asio::posix::stream_descriptor& descriptor, Handler&& handler )
 {
     return descriptor.async_wait( boost::asio::posix::stream_descriptor::wait_read, std::forward< Handler >( handler ) );
 }
-#    elif defined( _WIN32 )
+#  elif defined( _WIN32 )
 template < typename Handler >
 auto async_wait( boost::asio::windows::object_handle& descriptor, Handler&& handler )
 {
     return descriptor.async_wait( std::forward< Handler >( handler ) );
 }
-#    endif
+#  endif
 
 template < typename Mutex, typename Handler >
 struct async_acquire_op : std::enable_shared_from_this< async_acquire_op< Mutex, Handler > >
@@ -244,7 +244,7 @@ NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS
     auto dup_fd = detail::duplicate_native_handle( mtx.native_handle() );
     auto sd     = std::make_shared< detail::native_stream_descriptor >( ioc, dup_fd );
 
-#    ifdef __cpp_lib_move_only_function
+#  ifdef __cpp_lib_move_only_function
     auto promise = promise_t();
     auto future  = promise.get_future();
 
@@ -267,7 +267,7 @@ NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS
             }
         } );
     };
-#    else
+#  else
     auto promise = std::make_shared< promise_t >();
     auto future  = promise->get_future();
 
@@ -290,7 +290,7 @@ NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS
             }
         } );
     };
-#    endif
+#  endif
 
     std::invoke( *do_wait );
 

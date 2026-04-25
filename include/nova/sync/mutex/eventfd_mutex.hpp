@@ -4,18 +4,18 @@
 #pragma once
 
 #if defined( __linux__ )
-#    define NOVA_SYNC_HAS_EVENTFD_MUTEX 1
+#  define NOVA_SYNC_HAS_EVENTFD_MUTEX 1
 #endif
 
 #ifdef NOVA_SYNC_HAS_EVENTFD_MUTEX
 
-#    include <atomic>
-#    include <chrono>
-#    include <nova/sync/detail/backoff.hpp>
-#    include <nova/sync/detail/compat.hpp>
-#    include <nova/sync/detail/timed_wait.hpp>
-#    include <nova/sync/mutex/annotations.hpp>
-#    include <nova/sync/mutex/support/async_waiter_guard.hpp>
+#  include <atomic>
+#  include <chrono>
+#  include <nova/sync/detail/backoff.hpp>
+#  include <nova/sync/detail/compat.hpp>
+#  include <nova/sync/detail/timed_wait.hpp>
+#  include <nova/sync/mutex/annotations.hpp>
+#  include <nova/sync/mutex/support/async_waiter_guard.hpp>
 
 namespace nova::sync {
 

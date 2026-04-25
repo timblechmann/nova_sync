@@ -9,7 +9,7 @@
 #include <nova/sync/detail/timed_wait.hpp>
 
 #if defined( __linux__ )
-#    include <atomic>
+#  include <atomic>
 #endif
 
 namespace nova::sync {

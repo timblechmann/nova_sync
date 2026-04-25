@@ -4,17 +4,17 @@
 #pragma once
 
 #if __has_include( <unistd.h> )
-#    include <unistd.h>
+#  include <unistd.h>
 #endif
 
 #if defined( _WIN32 )
-#    include <limits>
+#  include <limits>
 typedef void* HANDLE;
 extern "C" {
 __declspec( dllimport ) int __stdcall CloseHandle( void* );
 }
 
-#    include <memory>
+#  include <memory>
 
 #endif
 

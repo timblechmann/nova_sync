@@ -4,21 +4,21 @@
 #pragma once
 
 #if __has_include( <pthread.h> ) && __has_include( <unistd.h> )
-#    include <pthread.h>
-#    include <unistd.h>
-#    if defined( _POSIX_THREAD_PRIO_PROTECT ) && _POSIX_THREAD_PRIO_PROTECT >= 0
-#        define NOVA_SYNC_HAS_PTHREAD_RT_MUTEX 1
-#    endif
+#  include <pthread.h>
+#  include <unistd.h>
+#  if defined( _POSIX_THREAD_PRIO_PROTECT ) && _POSIX_THREAD_PRIO_PROTECT >= 0
+#    define NOVA_SYNC_HAS_PTHREAD_RT_MUTEX 1
+#  endif
 #endif
 
 #ifdef NOVA_SYNC_HAS_PTHREAD_RT_MUTEX
 
-#    include <chrono>
-#    include <ctime>
-#    include <stdexcept>
+#  include <chrono>
+#  include <ctime>
+#  include <stdexcept>
 
-#    include <nova/sync/detail/compat.hpp>
-#    include <nova/sync/mutex/annotations.hpp>
+#  include <nova/sync/detail/compat.hpp>
+#  include <nova/sync/mutex/annotations.hpp>
 
 namespace nova::sync {
 

@@ -5,13 +5,13 @@
 
 
 #if defined( _WIN32 )
-#    define NOVA_SYNC_HAS_WIN32_SRW_MUTEX 1
+#  define NOVA_SYNC_HAS_WIN32_SRW_MUTEX 1
 #endif
 
 #ifdef NOVA_SYNC_HAS_WIN32_SRW_MUTEX
 
-#    include <nova/sync/detail/compat.hpp>
-#    include <nova/sync/mutex/annotations.hpp>
+#  include <nova/sync/detail/compat.hpp>
+#  include <nova/sync/mutex/annotations.hpp>
 
 namespace nova::sync {
 

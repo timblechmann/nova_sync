@@ -7,11 +7,11 @@
 
 // Platform-specific async mutex implementations
 #if defined( _WIN32 )
-#    include <nova/sync/mutex/win32_event_mutex.hpp>
+#  include <nova/sync/mutex/win32_event_mutex.hpp>
 #elif defined( __APPLE__ )
-#    include <nova/sync/mutex/kqueue_mutex.hpp>
+#  include <nova/sync/mutex/kqueue_mutex.hpp>
 #elif defined( __linux__ )
-#    include <nova/sync/mutex/eventfd_mutex.hpp>
+#  include <nova/sync/mutex/eventfd_mutex.hpp>
 #endif
 
 namespace nova::sync {

@@ -4,9 +4,9 @@
 #include <nova/sync/detail/syscall.hpp>
 
 #if defined( __linux__ ) || defined( __APPLE__ )
-#    include <unistd.h>
+#  include <unistd.h>
 #elif defined( _WIN32 )
-#    include <windows.h>
+#  include <windows.h>
 #endif
 
 namespace nova::sync::detail {

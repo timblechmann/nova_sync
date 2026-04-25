@@ -11,10 +11,10 @@
 #include <nova/sync/mutex/concepts.hpp>
 
 #ifdef NOVA_SYNC_HAS_QT
-#    include <QtCore/qmutex.h>
-#    define NOVA_SYNC_QT_MUTEX_TYPE , QMutex
+#  include <QtCore/qmutex.h>
+#  define NOVA_SYNC_QT_MUTEX_TYPE , QMutex
 #else
-#    define NOVA_SYNC_QT_MUTEX_TYPE
+#  define NOVA_SYNC_QT_MUTEX_TYPE
 #endif
 
 #include "mutex_types.hpp"

@@ -41,27 +41,27 @@
 
 #if defined( NOVA_SYNC_HAS_EXPECTED ) && __has_include( <QCoreApplication> )
 
-#    include <atomic>
-#    include <future>
-#    include <memory>
-#    include <mutex>
-#    include <optional>
-#    include <system_error>
+#  include <atomic>
+#  include <future>
+#  include <memory>
+#  include <mutex>
+#  include <optional>
+#  include <system_error>
 
-#    include <QtCore/QObject>
-#    include <QtCore/QPointer>
-#    include <QtCore/QThread>
+#  include <QtCore/QObject>
+#  include <QtCore/QPointer>
+#  include <QtCore/QThread>
 
-#    if defined( __linux__ ) || defined( __APPLE__ )
-#        include <QtCore/QSocketNotifier>
-#    elif defined( _WIN32 )
-#        include <QtCore/QWinEventNotifier>
-#    endif
+#  if defined( __linux__ ) || defined( __APPLE__ )
+#    include <QtCore/QSocketNotifier>
+#  elif defined( _WIN32 )
+#    include <QtCore/QWinEventNotifier>
+#  endif
 
-#    include <nova/sync/detail/native_handle_support.hpp>
-#    include <nova/sync/detail/syscall.hpp>
-#    include <nova/sync/mutex/concepts.hpp>
-#    include <nova/sync/mutex/detail/async_support.hpp>
+#  include <nova/sync/detail/native_handle_support.hpp>
+#  include <nova/sync/detail/syscall.hpp>
+#  include <nova/sync/mutex/concepts.hpp>
+#  include <nova/sync/mutex/detail/async_support.hpp>
 
 namespace nova::sync {
 
@@ -72,11 +72,11 @@ namespace nova::sync {
 namespace detail {
 
 // Platform-specific notifier alias
-#    if defined( __linux__ ) || defined( __APPLE__ )
+#  if defined( __linux__ ) || defined( __APPLE__ )
 using QtNotifier = QSocketNotifier;
-#    elif defined( _WIN32 )
+#  elif defined( _WIN32 )
 using QtNotifier = QWinEventNotifier;
-#    endif
+#  endif
 
 inline void delete_notifier( QtNotifier* notifier )
 {
@@ -103,9 +103,9 @@ struct qt_acquire_op : std::enable_shared_from_this< qt_acquire_op< Mutex, Handl
     Handler                                              handler_;
     QPointer< QtNotifier >                               notifier_;
     std::optional< detail::async_waiter_guard< Mutex > > waiter_guard_;
-#    if defined( __linux__ ) || defined( __APPLE__ )
+#  if defined( __linux__ ) || defined( __APPLE__ )
     detail::scoped_file_descriptor dup_fd_;
-#    endif
+#  endif
 
     qt_acquire_op( Mutex& mtx, QObject* context, Handler&& handler ) :
         mtx_( mtx ),
@@ -143,15 +143,15 @@ private:
 
     void create_and_arm_notifier()
     {
-#    if defined( __linux__ ) || defined( __APPLE__ )
+#  if defined( __linux__ ) || defined( __APPLE__ )
         dup_fd_ = detail::scoped_file_descriptor::from_dup( mtx_.native_handle() );
         if ( !dup_fd_ )
             return; // dup failed, can't proceed
 
         notifier_ = new QSocketNotifier( dup_fd_.get(), QSocketNotifier::Read, context_ );
-#    elif defined( _WIN32 )
+#  elif defined( _WIN32 )
         notifier_ = new QWinEventNotifier( mtx_.native_handle(), context_ );
-#    endif
+#  endif
 
         QObject::connect( notifier_, &QtNotifier::activated, [ self = this->shared_from_this() ] {
             self->on_notified();
@@ -193,9 +193,9 @@ struct qt_acquire_cancellable_op : std::enable_shared_from_this< qt_acquire_canc
     std::atomic< bool >                                  cancellation_requested_ { false };
     std::atomic< bool >                                  handler_invoked_ { false };
     std::optional< detail::async_waiter_guard< Mutex > > waiter_guard_;
-#    if defined( __linux__ ) || defined( __APPLE__ )
+#  if defined( __linux__ ) || defined( __APPLE__ )
     detail::scoped_file_descriptor dup_fd_;
-#    endif
+#  endif
 
     qt_acquire_cancellable_op( Mutex& mtx, QObject* context, Handler&& handler ) :
         mtx_( mtx ),
@@ -284,7 +284,7 @@ private:
 
     void create_and_arm_notifier()
     {
-#    if defined( __linux__ ) || defined( __APPLE__ )
+#  if defined( __linux__ ) || defined( __APPLE__ )
         dup_fd_ = detail::scoped_file_descriptor::from_dup( mtx_.native_handle() );
         if ( !dup_fd_ )
             return; // dup failed, can't proceed
@@ -293,12 +293,12 @@ private:
         QObject::connect( notifier_, &QSocketNotifier::activated, [ self = this->shared_from_this() ] {
             self->on_notified();
         } );
-#    elif defined( _WIN32 )
+#  elif defined( _WIN32 )
         notifier_ = new QWinEventNotifier( mtx_.native_handle(), context_ );
         QObject::connect( notifier_, &QWinEventNotifier::activated, [ self = this->shared_from_this() ] {
             self->on_notified();
         } );
-#    endif
+#  endif
 
         notifier_->setEnabled( true );
     }

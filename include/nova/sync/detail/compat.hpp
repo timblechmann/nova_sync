@@ -7,11 +7,11 @@
 #include <version>
 
 #if __has_cpp_attribute( gnu::noinline )
-#    define NOVA_SYNC_NOINLINE [[gnu::noinline]]
+#  define NOVA_SYNC_NOINLINE [[gnu::noinline]]
 #elif __has_cpp_attribute( msvc::noinline ) // C++23
-#    define NOVA_SYNC_NOINLINE [[msvc::noinline]]
+#  define NOVA_SYNC_NOINLINE [[msvc::noinline]]
 #else
-#    define NOVA_SYNC_NOINLINE
+#  define NOVA_SYNC_NOINLINE
 #endif
 
 namespace nova::sync::detail {

@@ -3,20 +3,20 @@
 
 #ifdef NOVA_SYNC_HAS_QT
 
-#    include <catch2/catch_all.hpp>
+#  include <catch2/catch_all.hpp>
 
-#    include "mutex_types.hpp"
+#  include "mutex_types.hpp"
 
-#    include <nova/sync/mutex/support/qt_support.hpp>
+#  include <nova/sync/mutex/support/qt_support.hpp>
 
-#    include <atomic>
-#    include <chrono>
-#    include <memory>
-#    include <mutex>
-#    include <system_error>
-#    include <thread>
+#  include <atomic>
+#  include <chrono>
+#  include <memory>
+#  include <mutex>
+#  include <system_error>
+#  include <thread>
 
-#    include <QtCore/QCoreApplication>
+#  include <QtCore/QCoreApplication>
 
 using namespace std::chrono_literals;
 
@@ -75,7 +75,7 @@ TEMPLATE_TEST_CASE( "native_async_mutex (Qt): explicit expected types",
 
     auto handler_fired = std::make_shared< std::atomic< bool > >( false );
 
-#    ifdef NOVA_SYNC_HAS_TL_EXPECTED
+#  ifdef NOVA_SYNC_HAS_TL_EXPECTED
     SECTION( "tl::expected" )
     {
         nova::sync::qt_async_acquire( mtx,
@@ -91,9 +91,9 @@ TEMPLATE_TEST_CASE( "native_async_mutex (Qt): explicit expected types",
         } );
         REQUIRE( handler_fired->load() );
     }
-#    endif
+#  endif
 
-#    ifdef NOVA_SYNC_HAS_STD_EXPECTED
+#  ifdef NOVA_SYNC_HAS_STD_EXPECTED
     SECTION( "std::expected" )
     {
         nova::sync::qt_async_acquire(
@@ -110,7 +110,7 @@ TEMPLATE_TEST_CASE( "native_async_mutex (Qt): explicit expected types",
         } );
         REQUIRE( handler_fired->load() );
     }
-#    endif
+#  endif
 }
 
 TEMPLATE_TEST_CASE( "native_async_mutex (Qt): async acquire fires after unlock",

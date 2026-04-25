@@ -5,9 +5,9 @@
 
 #ifdef NOVA_SYNC_HAS_WIN32_MUTEX
 
-#    include <windows.h>
+#  include <windows.h>
 
-#    include <cassert>
+#  include <cassert>
 
 namespace nova::sync {
 

@@ -5,13 +5,13 @@
 
 
 #if defined( __APPLE__ )
-#    define NOVA_SYNC_HAS_APPLE_OS_UNFAIR_MUTEX 1
-#    include <os/lock.h>
+#  define NOVA_SYNC_HAS_APPLE_OS_UNFAIR_MUTEX 1
+#  include <os/lock.h>
 #endif
 
 #ifdef NOVA_SYNC_HAS_APPLE_OS_UNFAIR_MUTEX
 
-#    include <nova/sync/mutex/annotations.hpp>
+#  include <nova/sync/mutex/annotations.hpp>
 
 namespace nova::sync {
 

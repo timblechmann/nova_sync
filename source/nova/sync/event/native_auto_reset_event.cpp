@@ -4,22 +4,22 @@
 #include <nova/sync/event/native_auto_reset_event.hpp>
 
 #if defined( _WIN32 )
-#    include <windows.h>
+#  include <windows.h>
 #else
-#    include <fcntl.h>
-#    include <poll.h>
-#    include <unistd.h>
-#    if defined( __linux__ )
-#        include <sys/eventfd.h>
-#    elif defined( __APPLE__ )
-#        include <sys/event.h>
-#        include <sys/time.h>
-#        include <sys/types.h>
-#    endif
-#    include <chrono>
-#    include <nova/sync/detail/native_handle_support.hpp>
-#    include <nova/sync/detail/syscall.hpp>
-#    include <nova/sync/detail/timed_wait.hpp>
+#  include <fcntl.h>
+#  include <poll.h>
+#  include <unistd.h>
+#  if defined( __linux__ )
+#    include <sys/eventfd.h>
+#  elif defined( __APPLE__ )
+#    include <sys/event.h>
+#    include <sys/time.h>
+#    include <sys/types.h>
+#  endif
+#  include <chrono>
+#  include <nova/sync/detail/native_handle_support.hpp>
+#  include <nova/sync/detail/syscall.hpp>
+#  include <nova/sync/detail/timed_wait.hpp>
 #endif
 
 namespace nova::sync {
@@ -62,11 +62,11 @@ native_auto_reset_event::~native_auto_reset_event() = default;
 #if defined( _WIN32 ) || defined( __APPLE__ )
 native_auto_reset_event::native_handle_type native_auto_reset_event::native_handle() const noexcept
 {
-#    if defined( _WIN32 ) || defined( __linux__ ) || defined( __APPLE__ )
+#  if defined( _WIN32 ) || defined( __linux__ ) || defined( __APPLE__ )
     return handle_.get();
-#    else
+#  else
     return fds_[ 0 ].get();
-#    endif
+#  endif
 }
 #endif
 
@@ -143,19 +143,19 @@ bool native_auto_reset_event::try_wait_for( duration_type timeout ) noexcept
     if ( timeout <= 0ms )
         return try_wait();
 
-#    if defined( __linux__ )
+#  if defined( __linux__ )
     if ( detail::ppoll_for( handle_.get(), timeout ) )
         return try_wait();
     return false;
-#    elif defined( __APPLE__ )
+#  elif defined( __APPLE__ )
     if ( detail::kevent_for( native_handle(), timeout ) )
         return try_wait();
     return false;
-#    else
+#  else
     struct pollfd pfd = { native_handle(), POLLIN, 0 };
     detail::poll_intr( &pfd, 1, timeout );
     return try_wait();
-#    endif
+#  endif
 #endif
 }
 

@@ -13,7 +13,7 @@
 
 #if defined( NOVA_SYNC_HAS_EXPECTED )
 
-#    include <system_error>
+#  include <system_error>
 
 namespace nova::sync::detail {
 
@@ -42,12 +42,12 @@ void invoke_event_error( Handler&& handler, std::errc ec )
 /// @brief Concept: handler is callable with `expected<void, std::error_code>`.
 template < typename Handler >
 concept invocable_with_void_expected = false // Base case so we can cleanly chain || with macros
-#    ifdef NOVA_SYNC_HAS_STD_EXPECTED
+#  ifdef NOVA_SYNC_HAS_STD_EXPECTED
                                        || std::invocable< Handler, std::expected< void, std::error_code > >
-#    endif
-#    ifdef NOVA_SYNC_HAS_TL_EXPECTED
+#  endif
+#  ifdef NOVA_SYNC_HAS_TL_EXPECTED
                                        || std::invocable< Handler, tl::expected< void, std::error_code > >
-#    endif
+#  endif
     ;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -6,19 +6,19 @@
 #include <nova/sync/detail/timed_wait.hpp>
 
 #if defined( _WIN32 )
-#    include <windows.h>
+#  include <windows.h>
 #else
-#    include <fcntl.h>
-#    include <poll.h>
-#    include <unistd.h>
-#    if defined( __linux__ )
-#        include <sys/eventfd.h>
-#    elif defined( __APPLE__ )
-#        include <sys/event.h>
-#        include <sys/time.h>
-#        include <sys/types.h>
-#    endif
-#    include <nova/sync/detail/syscall.hpp>
+#  include <fcntl.h>
+#  include <poll.h>
+#  include <unistd.h>
+#  if defined( __linux__ )
+#    include <sys/eventfd.h>
+#  elif defined( __APPLE__ )
+#    include <sys/event.h>
+#    include <sys/time.h>
+#    include <sys/types.h>
+#  endif
+#  include <nova/sync/detail/syscall.hpp>
 #endif
 
 namespace nova::sync {
@@ -134,21 +134,21 @@ bool native_manual_reset_event::try_wait_for( duration_type timeout ) const noex
     if ( timeout <= 0ms )
         return try_wait();
 
-#    if defined( __linux__ )
+#  if defined( __linux__ )
     if ( detail::ppoll_for( native_handle(), timeout ) )
         return try_wait();
     return false;
-#    elif defined( __APPLE__ )
+#  elif defined( __APPLE__ )
     if ( detail::kevent_for( native_handle(), timeout ) )
         return try_wait();
     return false;
-#    else
+#  else
     struct pollfd pfd = { native_handle(), POLLIN, 0 };
     int           rc  = detail::poll_intr( &pfd, 1, timeout );
     if ( rc <= 0 )
         return try_wait();
     return try_wait();
-#    endif
+#  endif
 #endif
 }
 

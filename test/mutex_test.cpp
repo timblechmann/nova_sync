@@ -539,8 +539,8 @@ TEMPLATE_TEST_CASE( "mutex: timed locking", "[mutex]", NOVA_SYNC_TIMED_MUTEX_TYP
 
 #ifdef NOVA_SYNC_HAS_PTHREAD_RT_MUTEX
 
-#    include <pthread.h>
-#    include <sched.h>
+#  include <pthread.h>
+#  include <sched.h>
 
 namespace {
 

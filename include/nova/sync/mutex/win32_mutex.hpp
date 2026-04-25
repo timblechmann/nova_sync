@@ -5,14 +5,14 @@
 
 #if defined( _WIN32 )
 
-#    define NOVA_SYNC_HAS_WIN32_MUTEX 1
+#  define NOVA_SYNC_HAS_WIN32_MUTEX 1
 #endif
 
 #ifdef NOVA_SYNC_HAS_WIN32_MUTEX
 
-#    include <chrono>
-#    include <nova/sync/detail/timed_wait.hpp>
-#    include <nova/sync/mutex/annotations.hpp>
+#  include <chrono>
+#  include <nova/sync/detail/timed_wait.hpp>
+#  include <nova/sync/mutex/annotations.hpp>
 
 typedef void* HANDLE;
 

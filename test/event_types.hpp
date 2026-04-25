@@ -17,10 +17,10 @@
 
 // native_auto_reset_event only exposes native_handle() on Win32 and Apple
 #if defined( _WIN32 ) || defined( __APPLE__ )
-#    define NOVA_SYNC_ASYNC_AUTO_EVENT_TYPES nova::sync::native_auto_reset_event
-#    define NOVA_SYNC_ASYNC_EVENT_TYPES      nova::sync::native_auto_reset_event, nova::sync::native_manual_reset_event
+#  define NOVA_SYNC_ASYNC_AUTO_EVENT_TYPES nova::sync::native_auto_reset_event
+#  define NOVA_SYNC_ASYNC_EVENT_TYPES      nova::sync::native_auto_reset_event, nova::sync::native_manual_reset_event
 #else
 // On Linux, native_auto_reset_event is not async-capable (no native_handle())
-#    define NOVA_SYNC_ASYNC_AUTO_EVENT_TYPES
-#    define NOVA_SYNC_ASYNC_EVENT_TYPES nova::sync::native_manual_reset_event
+#  define NOVA_SYNC_ASYNC_AUTO_EVENT_TYPES
+#  define NOVA_SYNC_ASYNC_EVENT_TYPES nova::sync::native_manual_reset_event
 #endif

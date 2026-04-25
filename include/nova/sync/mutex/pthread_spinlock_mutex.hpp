@@ -4,10 +4,10 @@
 #pragma once
 
 #if __has_include( <pthread.h> )
-#    include <pthread.h>
-#    if _POSIX_C_SOURCE >= 200112L
-#        define NOVA_SYNC_HAS_PTHREAD_SPINLOCK 1
-#    endif
+#  include <pthread.h>
+#  if _POSIX_C_SOURCE >= 200112L
+#    define NOVA_SYNC_HAS_PTHREAD_SPINLOCK 1
+#  endif
 #endif
 
 #include <nova/sync/mutex/annotations.hpp>

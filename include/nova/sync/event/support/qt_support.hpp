@@ -40,36 +40,36 @@
 
 #if defined( NOVA_SYNC_HAS_EXPECTED ) && __has_include( <QCoreApplication> )
 
-#    include <atomic>
-#    include <future>
-#    include <memory>
-#    include <optional>
-#    include <system_error>
+#  include <atomic>
+#  include <future>
+#  include <memory>
+#  include <optional>
+#  include <system_error>
 
-#    include <QtCore/QObject>
-#    include <QtCore/QPointer>
-#    include <QtCore/QThread>
+#  include <QtCore/QObject>
+#  include <QtCore/QPointer>
+#  include <QtCore/QThread>
 
-#    if defined( __linux__ ) || defined( __APPLE__ )
-#        include <QtCore/QSocketNotifier>
-#    elif defined( _WIN32 )
-#        include <QtCore/QWinEventNotifier>
-#    endif
+#  if defined( __linux__ ) || defined( __APPLE__ )
+#    include <QtCore/QSocketNotifier>
+#  elif defined( _WIN32 )
+#    include <QtCore/QWinEventNotifier>
+#  endif
 
-#    include <nova/sync/detail/native_handle_support.hpp>
-#    include <nova/sync/detail/syscall.hpp>
-#    include <nova/sync/event/concepts.hpp>
+#  include <nova/sync/detail/native_handle_support.hpp>
+#  include <nova/sync/detail/syscall.hpp>
+#  include <nova/sync/event/concepts.hpp>
 
 namespace nova::sync {
 
 namespace detail {
 
 // Platform-specific notifier alias (reuse the same alias name as mutex/qt_support)
-#    if defined( __linux__ ) || defined( __APPLE__ )
+#  if defined( __linux__ ) || defined( __APPLE__ )
 using QtEventNotifier = QSocketNotifier;
-#    elif defined( _WIN32 )
+#  elif defined( _WIN32 )
 using QtEventNotifier = QWinEventNotifier;
-#    endif
+#  endif
 
 inline void delete_event_notifier( QtEventNotifier* notifier )
 {
@@ -95,9 +95,9 @@ struct qt_event_wait_op : std::enable_shared_from_this< qt_event_wait_op< Event,
     QObject*                    context_;
     Handler                     handler_;
     QPointer< QtEventNotifier > notifier_;
-#    if defined( __linux__ ) || defined( __APPLE__ )
+#  if defined( __linux__ ) || defined( __APPLE__ )
     detail::scoped_file_descriptor dup_fd_;
-#    endif
+#  endif
 
     qt_event_wait_op( Event& evt, QObject* context, Handler&& handler ) :
         evt_( evt ),
@@ -130,15 +130,15 @@ private:
 
     void create_and_arm_notifier()
     {
-#    if defined( __linux__ ) || defined( __APPLE__ )
+#  if defined( __linux__ ) || defined( __APPLE__ )
         dup_fd_ = detail::scoped_file_descriptor::from_dup( evt_.native_handle() );
         if ( !dup_fd_ )
             return;
 
         notifier_ = new QSocketNotifier( dup_fd_.get(), QSocketNotifier::Read, context_ );
-#    elif defined( _WIN32 )
+#  elif defined( _WIN32 )
         notifier_ = new QWinEventNotifier( evt_.native_handle(), context_ );
-#    endif
+#  endif
 
         QObject::connect( notifier_, &QtEventNotifier::activated, [ self = this->shared_from_this() ] {
             self->on_notified();
@@ -178,9 +178,9 @@ struct qt_event_wait_cancellable_op : std::enable_shared_from_this< qt_event_wai
     QPointer< QtEventNotifier > notifier_;
     std::atomic< bool >         cancellation_requested_ { false };
     std::atomic< bool >         handler_invoked_ { false };
-#    if defined( __linux__ ) || defined( __APPLE__ )
+#  if defined( __linux__ ) || defined( __APPLE__ )
     detail::scoped_file_descriptor dup_fd_;
-#    endif
+#  endif
 
     qt_event_wait_cancellable_op( Event& evt, QObject* context, Handler&& handler ) :
         evt_( evt ),
@@ -261,15 +261,15 @@ private:
 
     void create_and_arm_notifier()
     {
-#    if defined( __linux__ ) || defined( __APPLE__ )
+#  if defined( __linux__ ) || defined( __APPLE__ )
         dup_fd_ = detail::scoped_file_descriptor::from_dup( evt_.native_handle() );
         if ( !dup_fd_ )
             return;
 
         notifier_ = new QSocketNotifier( dup_fd_.get(), QSocketNotifier::Read, context_ );
-#    elif defined( _WIN32 )
+#  elif defined( _WIN32 )
         notifier_ = new QWinEventNotifier( evt_.native_handle(), context_ );
-#    endif
+#  endif
 
         QObject::connect( notifier_, &QtEventNotifier::activated, [ self = this->shared_from_this() ] {
             self->on_notified();

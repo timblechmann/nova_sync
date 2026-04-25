@@ -10,9 +10,9 @@
 
 #if defined( NOVA_SYNC_HAS_EXPECTED )
 
-#    include <functional>
-#    include <mutex>
-#    include <system_error>
+#  include <functional>
+#  include <mutex>
+#  include <system_error>
 
 namespace nova::sync::detail {
 
@@ -113,12 +113,12 @@ decltype( auto ) with_async_waiter( Mutex& mtx, Fn&& fn )
 template < typename Handler, typename Mutex >
 concept invocable_with_expected
     = false // Base case so we can cleanly chain || with macros
-#    ifdef NOVA_SYNC_HAS_STD_EXPECTED
+#  ifdef NOVA_SYNC_HAS_STD_EXPECTED
       || std::invocable< Handler, std::expected< std::unique_lock< Mutex >, std::error_code > >
-#    endif
-#    ifdef NOVA_SYNC_HAS_TL_EXPECTED
+#  endif
+#  ifdef NOVA_SYNC_HAS_TL_EXPECTED
       || std::invocable< Handler, tl::expected< std::unique_lock< Mutex >, std::error_code > >
-#    endif
+#  endif
     ;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

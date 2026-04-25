@@ -8,17 +8,17 @@
 #include <optional>
 
 #if defined( __linux__ )
-#    include <cerrno>
-#    include <poll.h>
-#    include <sys/timerfd.h>
-#    include <time.h>
-#    include <unistd.h>
+#  include <cerrno>
+#  include <poll.h>
+#  include <sys/timerfd.h>
+#  include <time.h>
+#  include <unistd.h>
 #elif defined( __APPLE__ )
-#    include <sys/event.h>
-#    include <sys/time.h>
-#    include <sys/types.h>
+#  include <sys/event.h>
+#  include <sys/time.h>
+#  include <sys/types.h>
 #elif defined( _WIN32 )
-#    include <windows.h>
+#  include <windows.h>
 #endif
 
 namespace nova::sync::detail {

@@ -5,16 +5,16 @@
 
 #ifdef NOVA_SYNC_HAS_EVENTFD_MUTEX
 
-#    include <nova/sync/detail/backoff.hpp>
-#    include <nova/sync/detail/syscall.hpp>
-#    include <nova/sync/detail/timed_wait.hpp>
-#    include <nova/sync/mutex/support/async_waiter_guard.hpp>
+#  include <nova/sync/detail/backoff.hpp>
+#  include <nova/sync/detail/syscall.hpp>
+#  include <nova/sync/detail/timed_wait.hpp>
+#  include <nova/sync/mutex/support/async_waiter_guard.hpp>
 
-#    include <poll.h>
-#    include <sys/eventfd.h>
-#    include <unistd.h>
+#  include <poll.h>
+#  include <sys/eventfd.h>
+#  include <unistd.h>
 
-#    include <cassert>
+#  include <cassert>
 
 namespace nova::sync {
 

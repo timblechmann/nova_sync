@@ -5,17 +5,17 @@
 
 #ifdef NOVA_SYNC_HAS_KQUEUE_MUTEX
 
-#    include <nova/sync/detail/backoff.hpp>
-#    include <nova/sync/detail/timed_wait.hpp>
-#    include <nova/sync/mutex/support/async_waiter_guard.hpp>
+#  include <nova/sync/detail/backoff.hpp>
+#  include <nova/sync/detail/timed_wait.hpp>
+#  include <nova/sync/mutex/support/async_waiter_guard.hpp>
 
-#    include <sys/event.h>
-#    include <sys/time.h>
-#    include <sys/types.h>
-#    include <unistd.h>
+#  include <sys/event.h>
+#  include <sys/time.h>
+#  include <sys/types.h>
+#  include <unistd.h>
 
-#    include <cassert>
-#    include <cerrno>
+#  include <cassert>
+#  include <cerrno>
 
 namespace nova::sync {
 

@@ -43,18 +43,18 @@
 
 #if defined( __APPLE__ ) && defined( NOVA_SYNC_HAS_EXPECTED )
 
-#    include <atomic>
-#    include <future>
-#    include <memory>
-#    include <mutex>
-#    include <optional>
-#    include <system_error>
-#    include <utility>
+#  include <atomic>
+#  include <future>
+#  include <memory>
+#  include <mutex>
+#  include <optional>
+#  include <system_error>
+#  include <utility>
 
-#    include <dispatch/dispatch.h>
+#  include <dispatch/dispatch.h>
 
-#    include <nova/sync/mutex/concepts.hpp>
-#    include <nova/sync/mutex/detail/async_support.hpp>
+#  include <nova/sync/mutex/concepts.hpp>
+#  include <nova/sync/mutex/detail/async_support.hpp>
 
 namespace nova::sync {
 
@@ -64,19 +64,19 @@ namespace nova::sync {
 
 namespace detail {
 
-#    if !__has_feature( objc_arc )
+#  if !__has_feature( objc_arc )
 inline void release_dispatch_object( dispatch_object_t&& obj ) noexcept
 {
     if ( obj )
         dispatch_release( obj );
     obj = nullptr;
 }
-#    else
+#  else
 inline void release_dispatch_object( dispatch_object_t&& obj ) noexcept
 {
     obj = nullptr;
 }
-#    endif
+#  endif
 
 
 // ---------------------------------------------------------------------------

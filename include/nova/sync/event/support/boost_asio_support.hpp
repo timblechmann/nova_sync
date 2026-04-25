@@ -41,28 +41,28 @@
 
 #if __has_include( <boost/asio.hpp> ) && defined( NOVA_SYNC_HAS_EXPECTED )
 
-#    include <atomic>
-#    include <future>
-#    include <memory>
-#    include <system_error>
+#  include <atomic>
+#  include <future>
+#  include <memory>
+#  include <system_error>
 
-#    include <boost/asio/dispatch.hpp>
-#    include <boost/asio/io_context.hpp>
+#  include <boost/asio/dispatch.hpp>
+#  include <boost/asio/io_context.hpp>
 
-#    include <nova/sync/detail/syscall.hpp>
-#    include <nova/sync/event/concepts.hpp>
+#  include <nova/sync/detail/syscall.hpp>
+#  include <nova/sync/event/concepts.hpp>
 
-#    if defined( __linux__ ) || defined( __APPLE__ )
-#        include <boost/asio/posix/stream_descriptor.hpp>
-#    elif defined( _WIN32 )
-#        include <boost/asio/windows/object_handle.hpp>
-#    endif
+#  if defined( __linux__ ) || defined( __APPLE__ )
+#    include <boost/asio/posix/stream_descriptor.hpp>
+#  elif defined( _WIN32 )
+#    include <boost/asio/windows/object_handle.hpp>
+#  endif
 
 namespace nova::sync {
 
 namespace detail {
 
-#    if defined( __linux__ ) || defined( __APPLE__ )
+#  if defined( __linux__ ) || defined( __APPLE__ )
 using event_stream_descriptor = boost::asio::posix::stream_descriptor;
 
 template < typename Handler >
@@ -70,7 +70,7 @@ auto async_wait_descriptor( boost::asio::posix::stream_descriptor& descriptor, H
 {
     return descriptor.async_wait( boost::asio::posix::stream_descriptor::wait_read, std::forward< Handler >( handler ) );
 }
-#    elif defined( _WIN32 )
+#  elif defined( _WIN32 )
 using event_stream_descriptor = boost::asio::windows::object_handle;
 
 template < typename Handler >
@@ -78,7 +78,7 @@ auto async_wait_descriptor( boost::asio::windows::object_handle& descriptor, Han
 {
     return descriptor.async_wait( std::forward< Handler >( handler ) );
 }
-#    endif
+#  endif
 
 // ---------------------------------------------------------------------------
 // Non-cancellable async wait op
@@ -105,20 +105,20 @@ struct async_event_wait_op : std::enable_shared_from_this< async_event_wait_op< 
                 return invoke_event_error( self->handler_, std::errc::operation_canceled );
             }
 
-#    if defined( _WIN32 )
+#  if defined( _WIN32 )
             // On Windows, object_handle::async_wait uses RegisterWaitForSingleObject,
             // which atomically consumes auto-reset events and acquires semaphores.
             // The signal is already consumed when this callback fires, so try_wait()
             // would always return false. A clean wakeup (no error) means success.
             return invoke_event_success( self->handler_ );
-#    else
+#  else
             if ( self->evt_.try_wait() ) {
                 return invoke_event_success( self->handler_ );
             }
 
             // Spurious wakeup — retry
             self->start_wait();
-#    endif
+#  endif
         } );
     }
 
@@ -173,7 +173,7 @@ struct async_event_wait_cancellable_op :
                 return;
             }
 
-#    if defined( _WIN32 )
+#  if defined( _WIN32 )
             // On Windows, object_handle::async_wait uses RegisterWaitForSingleObject,
             // which atomically consumes auto-reset events. A clean wakeup means success.
             {
@@ -182,7 +182,7 @@ struct async_event_wait_cancellable_op :
                          expected, true, std::memory_order_release, std::memory_order_acquire ) )
                     invoke_event_success( self->handler_ );
             }
-#    else
+#  else
             if ( self->evt_.try_wait() ) {
                 // Double-check cancellation after consuming the token
                 if ( self->is_cancelled() ) {
@@ -199,7 +199,7 @@ struct async_event_wait_cancellable_op :
 
             // Spurious wakeup — retry
             self->start_wait();
-#    endif
+#  endif
         } );
     }
 
@@ -366,7 +366,7 @@ async_event_wait_future_state< Event > async_wait( boost::asio::io_context& ioc,
     auto dup_handle = detail::duplicate_native_handle( evt.native_handle() );
     auto sd         = std::make_shared< detail::event_stream_descriptor >( ioc, dup_handle );
 
-#    ifdef __cpp_lib_move_only_function
+#  ifdef __cpp_lib_move_only_function
     auto promise = promise_t();
     auto future  = promise.get_future();
 
@@ -379,22 +379,22 @@ async_event_wait_future_state< Event > async_wait( boost::asio::io_context& ioc,
                 return; // cancelled — promise intentionally left unfulfilled
             }
 
-#        if defined( _WIN32 )
+#    if defined( _WIN32 )
             // On Windows, RegisterWaitForSingleObject atomically consumes the event.
             // A clean callback (no error) means the event fired successfully.
             promise.set_value();
             *do_wait = nullptr;
-#        else
+#    else
             if ( evt.try_wait() ) {
                 promise.set_value();
                 *do_wait = nullptr;
             } else {
                 std::invoke( *do_wait ); // spurious — retry
             }
-#        endif
+#    endif
         } );
     };
-#    else
+#  else
     auto promise = std::make_shared< promise_t >();
     auto future  = promise->get_future();
 
@@ -407,20 +407,20 @@ async_event_wait_future_state< Event > async_wait( boost::asio::io_context& ioc,
                 return;
             }
 
-#        if defined( _WIN32 )
+#    if defined( _WIN32 )
             promise->set_value();
             *do_wait = nullptr;
-#        else
+#    else
             if ( evt.try_wait() ) {
                 promise->set_value();
                 *do_wait = nullptr;
             } else {
                 std::invoke( *do_wait );
             }
-#        endif
+#    endif
         } );
     };
-#    endif
+#  endif
 
     std::invoke( *do_wait );
 

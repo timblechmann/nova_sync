@@ -5,13 +5,13 @@
 
 #if defined( _WIN32 )
 
-#    define NOVA_SYNC_HAS_WIN32_CRITICAL_SECTION_MUTEX 1
+#  define NOVA_SYNC_HAS_WIN32_CRITICAL_SECTION_MUTEX 1
 #endif
 
 #ifdef NOVA_SYNC_HAS_WIN32_CRITICAL_SECTION_MUTEX
 
-#    include <nova/sync/mutex/annotations.hpp>
-#    include <nova/sync/mutex/concepts.hpp>
+#  include <nova/sync/mutex/annotations.hpp>
+#  include <nova/sync/mutex/concepts.hpp>
 
 namespace nova::sync {
 
