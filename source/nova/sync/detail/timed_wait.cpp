@@ -40,6 +40,8 @@ struct timespec as_timespec( std::chrono::nanoseconds ns ) noexcept
 }
 #endif
 
+using namespace std::chrono_literals;
+
 // ============================================================================
 // Linux — ppoll with EINTR handling and absolute timeout via timerfd
 // ============================================================================
@@ -47,7 +49,6 @@ struct timespec as_timespec( std::chrono::nanoseconds ns ) noexcept
 
 bool ppoll_for( int fd, std::chrono::nanoseconds rel ) noexcept
 {
-    using namespace std::chrono_literals;
     using clock = std::chrono::steady_clock;
 
     auto                             start = clock::now();
@@ -163,7 +164,6 @@ bool ppoll_until( int lock_fd, const std::chrono::time_point< std::chrono::stead
 
 bool kevent_for( int kqfd, std::chrono::nanoseconds rel_ns ) noexcept
 {
-    using namespace std::chrono_literals;
     using clock = std::chrono::steady_clock;
 
     auto                             start = clock::now();
@@ -264,7 +264,6 @@ bool kevent_until( int kqfd,
 
 bool wait_handle_for( HANDLE handle, std::chrono::milliseconds rel_ms ) noexcept
 {
-    using namespace std::chrono_literals;
     using clock = std::chrono::steady_clock;
 
     auto                             start = clock::now();

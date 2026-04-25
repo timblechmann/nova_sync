@@ -41,6 +41,13 @@ set(headers
     include/nova/sync/detail/compat.hpp
     include/nova/sync/detail/syscall.hpp
     include/nova/sync/detail/timed_wait.hpp
+    include/nova/sync/event/auto_reset_event.hpp
+    include/nova/sync/event/concepts.hpp
+    include/nova/sync/event/manual_reset_event.hpp
+    include/nova/sync/event/native_auto_reset_event.hpp
+    include/nova/sync/event/native_manual_reset_event.hpp
+    include/nova/sync/event/timed_auto_reset_event.hpp
+    include/nova/sync/event/timed_manual_reset_event.hpp
     include/nova/sync/mutex/annotations.hpp
     include/nova/sync/mutex/apple_os_unfair_mutex.hpp
     include/nova/sync/mutex/concepts.hpp
@@ -68,6 +75,10 @@ set(headers
 set(sources
     source/nova/sync/detail/syscall.cpp
     source/nova/sync/detail/timed_wait.cpp
+    source/nova/sync/event/native_auto_reset_event.cpp
+    source/nova/sync/event/native_manual_reset_event.cpp
+    source/nova/sync/event/timed_auto_reset_event.cpp
+    source/nova/sync/event/timed_manual_reset_event.cpp
     source/nova/sync/mutex/eventfd_mutex.cpp
     source/nova/sync/mutex/fair_mutex.cpp
     source/nova/sync/mutex/fast_mutex.cpp
@@ -75,7 +86,6 @@ set(sources
     source/nova/sync/mutex/recursive_spinlock_mutex.cpp
     source/nova/sync/mutex/shared_spinlock_mutex.cpp
     source/nova/sync/mutex/spinlock_mutex.cpp
-
     source/nova/sync/mutex/win32_critical_section_mutex.cpp
     source/nova/sync/mutex/win32_event_mutex.cpp
     source/nova/sync/mutex/win32_mutex.cpp
@@ -164,6 +174,8 @@ if(NOVA_SYNC_TESTS)
         test/mutex_benchmarks.cpp
         test/mutex_async_asio_test.cpp
         test/mutex_thread_safety_test.cpp
+        test/event_test.cpp
+        test/event_benchmarks.cpp
     )
 
     if(APPLE)
