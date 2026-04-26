@@ -220,6 +220,12 @@ struct async_acquire_future_state
             descriptor->cancel(); // Cancel any pending wait on destruction
     }
 
+    async_acquire_future_state( std::shared_ptr< detail::native_stream_descriptor > d,
+                                std::future< std::unique_lock< Mutex > >            f ) :
+        descriptor( std::move( d ) ),
+        future( std::move( f ) )
+    {}
+
     std::shared_ptr< detail::native_stream_descriptor > descriptor;
     std::future< std::unique_lock< Mutex > >            future;
 };
