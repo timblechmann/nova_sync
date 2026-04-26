@@ -17,7 +17,7 @@ static_assert( nova::sync::concepts::timed_event< nova::sync::timed_manual_reset
 static_assert( nova::sync::concepts::native_async_event< nova::sync::native_manual_reset_event > );
 static_assert( nova::sync::concepts::auto_reset_event< nova::sync::auto_reset_event > );
 static_assert( nova::sync::concepts::timed_event< nova::sync::timed_auto_reset_event > );
-#if defined( _WIN32 ) || defined( __APPLE__ )
+#if defined( _WIN32 )
 static_assert( nova::sync::concepts::native_async_event< nova::sync::native_auto_reset_event > );
 #else
 static_assert( !nova::sync::concepts::native_async_event< nova::sync::native_auto_reset_event > );

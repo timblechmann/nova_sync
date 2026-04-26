@@ -8,7 +8,7 @@
 #include <nova/sync/detail/native_handle_support.hpp>
 #include <nova/sync/detail/timed_wait.hpp>
 
-#if defined( __linux__ )
+#if defined( __linux__ ) || defined( __APPLE__ )
 #  include <atomic>
 #endif
 
@@ -18,7 +18,9 @@ namespace nova::sync {
 ///
 /// Each `signal()` delivers exactly one token. If a thread is blocked in
 /// `wait()`, it is woken and the token is consumed. Otherwise the token is
-/// stored for the next `wait()` / `try_wait()` call.
+/// stored for the next `wait()` / `try_wait()` call.  When no thread is
+/// waiting and the event is already signalled, a further `signal()` is a
+/// no-op (idempotent in the unwaited-upon state).
 class native_auto_reset_event
 {
 public:
@@ -30,7 +32,7 @@ public:
     using native_handle_type = int;
 #endif
 
-#if defined( _WIN32 ) || defined( __APPLE__ )
+#if defined( _WIN32 )
     static constexpr bool is_async_capable = true;
 #else
     static constexpr bool is_async_capable = false;
@@ -45,7 +47,7 @@ public:
     native_auto_reset_event( const native_auto_reset_event& )            = delete;
     native_auto_reset_event& operator=( const native_auto_reset_event& ) = delete;
 
-#if defined( _WIN32 ) || defined( __APPLE__ )
+#if defined( _WIN32 )
     /// @brief Returns the underlying OS native handle for event-loop integration.
     native_handle_type native_handle() const noexcept;
 #endif
@@ -74,9 +76,12 @@ public:
                 return try_wait();
             return false;
 #elif defined( __APPLE__ )
-            if ( detail::kevent_until( native_handle(), 1, abs_time ) )
+            // Convert absolute deadline to relative timeout and delegate to
+            // try_wait_for(), which handles the atomic token count correctly.
+            auto remaining = abs_time - Clock::now();
+            if ( remaining <= Clock::duration::zero() )
                 return try_wait();
-            return false;
+            return try_wait_for( std::chrono::duration_cast< duration_type >( remaining ) );
 #endif
         }
         return try_wait_for( std::chrono::round< duration_type >( abs_time - Clock::now() ) );
@@ -96,7 +101,12 @@ private:
     std::atomic< uint32_t > wait_count_ { 0 }; // Track if threads are waiting
 #elif defined( __APPLE__ )
     using scoped_file_descriptor = detail::scoped_file_descriptor;
-    scoped_file_descriptor handle_;
+    scoped_file_descriptor  handle_;
+    // token_count_: number of unconsumed tokens (≥ 0).
+    // wait_count_:  number of threads blocked in wait()/try_wait_for/until().
+    // Invariant: at most one kqueue NOTE_TRIGGER is in flight at any time.
+    std::atomic< int >      token_count_ { 0 };
+    std::atomic< uint32_t > wait_count_ { 0 };
 #else
     using scoped_file_descriptor = detail::scoped_file_descriptor;
     scoped_file_descriptor fds_[ 2 ];
