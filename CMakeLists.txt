@@ -109,6 +109,13 @@ cmake_dependent_option(
     "CMAKE_CXX_COMPILER_ID MATCHES Clang OR CMAKE_CXX_COMPILER_ID MATCHES AppleClang"
     OFF
 )
+cmake_dependent_option(
+    NOVA_SYNC_TESTS_STRESS_TEST
+    "Run stress tests via ctest"
+    ON
+    "NOVA_SYNC_TESTS"
+    OFF
+)
 
 if(WIN32)
     target_compile_definitions(nova_sync PRIVATE
@@ -237,7 +244,10 @@ if(NOVA_SYNC_TESTS)
     endif()
 
     enable_testing()
-    add_test(NAME nova_sync_tests COMMAND nova_sync_tests)
+
+    if (NOT NOVA_SYNC_TESTS_STRESS_TEST)
+        add_test(NAME nova_sync_tests COMMAND nova_sync_tests ~[stress])
+    endif()
 
     # ---------------------------------------------------------------------------
     # Negative compile tests — expected NOT to compile.
