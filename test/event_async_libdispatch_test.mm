@@ -144,7 +144,7 @@ TEMPLATE_TEST_CASE( "async_event (dispatch): future-based async_wait",
 // Tests: cancellation
 // ---------------------------------------------------------------------------
 
-TEMPLATE_TEST_CASE( "async_event (dispatch): async_wait_cancellable — cancel stops wait",
+TEMPLATE_TEST_CASE( "async_event (dispatch): async_wait_cancellable - cancel stops wait",
                     "[async_event][libdispatch]",
                     NOVA_SYNC_ASYNC_EVENT_TYPES )
 {
@@ -167,7 +167,7 @@ TEMPLATE_TEST_CASE( "async_event (dispatch): async_wait_cancellable — cancel s
     dispatch_release( queue );
 }
 
-TEMPLATE_TEST_CASE( "async_event (dispatch): async_wait_cancellable — destructor auto-cancels",
+TEMPLATE_TEST_CASE( "async_event (dispatch): async_wait_cancellable - destructor auto-cancels",
                     "[async_event][libdispatch]",
                     NOVA_SYNC_ASYNC_EVENT_TYPES )
 {
@@ -195,7 +195,7 @@ TEMPLATE_TEST_CASE( "async_event (dispatch): async_wait_cancellable — destruct
 // Tests: manual_reset — all waiters wake on signal
 // ---------------------------------------------------------------------------
 
-TEST_CASE( "async_event (dispatch): manual_reset_event — signal wakes all waiters", "[async_event][libdispatch]" )
+TEST_CASE( "async_event (dispatch): manual_reset_event - signal wakes all waiters", "[async_event][libdispatch]" )
 {
     nova::sync::native_manual_reset_event evt;
     dispatch_queue_t                      queue = make_serial_queue( "nova.test.event.manual_multi" );

@@ -217,7 +217,7 @@ TEMPLATE_TEST_CASE( "async_mutex: async acquire future", "[async_mutex][boost_as
     runner.stop();
 }
 
-TEMPLATE_TEST_CASE( "async_acquire_cancellable — cancel prevents handler",
+TEMPLATE_TEST_CASE( "async_acquire_cancellable - cancel prevents handler",
                     "[async_mutex][boost_asio]",
                     NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
@@ -251,7 +251,7 @@ TEMPLATE_TEST_CASE( "async_acquire_cancellable — cancel prevents handler",
     REQUIRE( handler_invoked->load() );
 }
 
-TEMPLATE_TEST_CASE( "async_acquire_cancellable — destructor auto-cancels",
+TEMPLATE_TEST_CASE( "async_acquire_cancellable - destructor auto-cancels",
                     "[async_mutex][boost_asio]",
                     NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {

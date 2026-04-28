@@ -195,7 +195,7 @@ TEMPLATE_TEST_CASE( "manual_reset_event implementations",
             REQUIRE( !ok );
         }
 
-        SECTION( "signal() is lockfree — caller never blocks" )
+        SECTION( "signal() is lockfree - caller never blocks" )
         {
             const unsigned     n = std::max( 2u, std::thread::hardware_concurrency() );
             std::atomic< int > woken { 0 };
@@ -273,7 +273,7 @@ TEMPLATE_TEST_CASE( "manual_reset_event implementations",
             REQUIRE( ev.try_wait() );
         }
 
-        SECTION( "wait_for wakes up when signalled (native — long)" )
+        SECTION( "wait_for wakes up when signalled (native - long)" )
         {
             using clock = std::chrono::steady_clock;
 
@@ -307,7 +307,7 @@ TEMPLATE_TEST_CASE( "manual_reset_event implementations",
             REQUIRE( acquired_in_a );
         }
 
-        SECTION( "wait_until (steady_clock) wakes up when signalled (native — long)" )
+        SECTION( "wait_until (steady_clock) wakes up when signalled (native - long)" )
         {
             using clock = std::chrono::steady_clock;
 
@@ -337,7 +337,7 @@ TEMPLATE_TEST_CASE( "manual_reset_event implementations",
             REQUIRE( acquired_in_a );
         }
 
-        SECTION( "wait_until (system_clock) wakes up when signalled (native — long)" )
+        SECTION( "wait_until (system_clock) wakes up when signalled (native - long)" )
         {
             using steady = std::chrono::steady_clock;
             using system = std::chrono::system_clock;
@@ -384,7 +384,7 @@ TEMPLATE_TEST_CASE( "manual_reset_event implementations (stress tests)",
     using event_t = TestType;
     event_t ev;
 
-    SECTION( "stress — many signal/reset/wait cycles" )
+    SECTION( "stress - many signal/reset/wait cycles" )
     {
         const int          iterations = 500;
         std::atomic< int > counter { 0 };
@@ -456,7 +456,7 @@ TEMPLATE_TEST_CASE( "auto_reset_event implementations",
         REQUIRE( !ev.try_wait() ); // gone
     }
 
-    SECTION( "signal is idempotent — second signal does not add a second token" )
+    SECTION( "signal is idempotent - second signal does not add a second token" )
     {
         ev.signal();
         ev.signal(); // must not accumulate
@@ -544,7 +544,7 @@ TEMPLATE_TEST_CASE( "auto_reset_event implementations",
             REQUIRE( !ok );
         }
 
-        SECTION( "signal() is lockfree — caller never blocks" )
+        SECTION( "signal() is lockfree - caller never blocks" )
         {
             const unsigned     n = std::max( 2u, std::thread::hardware_concurrency() );
             std::atomic< int > woken { 0 };
@@ -585,7 +585,7 @@ TEMPLATE_TEST_CASE( "auto_reset_event implementations (stress tests)",
     using event_t = TestType;
     event_t ev;
 
-    SECTION( "stress — strict ping-pong producer/consumer" )
+    SECTION( "stress - strict ping-pong producer/consumer" )
     {
         event_t            ev_fwd, ev_ack;
         const int          iterations = 1000;
@@ -615,7 +615,7 @@ TEMPLATE_TEST_CASE( "auto_reset_event implementations (stress tests)",
     }
 
     if constexpr ( nova::sync::concepts::auto_reset_event< event_t > && !nova::sync::concepts::timed_event< event_t > ) {
-        SECTION( "stress — concurrent try_wait is race-free" )
+        SECTION( "stress - concurrent try_wait is race-free" )
         {
             const int           pulses = 500;
             const unsigned      takers = std::max( 2u, std::thread::hardware_concurrency() );

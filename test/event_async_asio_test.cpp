@@ -199,7 +199,7 @@ TEMPLATE_TEST_CASE( "async_event: future-based async_wait", "[async_event][boost
 // Tests: cancellation
 // ---------------------------------------------------------------------------
 
-TEMPLATE_TEST_CASE( "async_event: async_wait_cancellable — cancel stops wait",
+TEMPLATE_TEST_CASE( "async_event: async_wait_cancellable - cancel stops wait",
                     "[async_event][boost_asio]",
                     NOVA_SYNC_ASYNC_EVENT_TYPES )
 {
@@ -220,7 +220,7 @@ TEMPLATE_TEST_CASE( "async_event: async_wait_cancellable — cancel stops wait",
     REQUIRE( wait_for_flag( *handler_invoked ) );
 }
 
-TEMPLATE_TEST_CASE( "async_event: async_wait_cancellable — destructor auto-cancels",
+TEMPLATE_TEST_CASE( "async_event: async_wait_cancellable - destructor auto-cancels",
                     "[async_event][boost_asio]",
                     NOVA_SYNC_ASYNC_EVENT_TYPES )
 {
@@ -246,7 +246,7 @@ TEMPLATE_TEST_CASE( "async_event: async_wait_cancellable — destructor auto-can
 // Tests: manual_reset_event — multiple concurrent waiters all fire
 // ---------------------------------------------------------------------------
 
-TEST_CASE( "async_event: manual_reset_event — signal wakes all waiters", "[async_event][boost_asio]" )
+TEST_CASE( "async_event: manual_reset_event - signal wakes all waiters", "[async_event][boost_asio]" )
 {
     nova::sync::native_manual_reset_event evt;
     asio_event_runner                     runner;
