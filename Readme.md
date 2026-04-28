@@ -144,6 +144,54 @@ Multi-threaded benchmark:
 ![Windows multi-threaded benchmark](benchmarks/win32_intel_14700K_multi-threaded.svg)
 
 
+## Semaphore Types
+
+| Type | Timed waits | Native handle | Platform |
+|------|-------------|---------------|----------|
+| `fast_semaphore` | — | — | Cross-platform |
+| `timed_counting_semaphore` | `try_acquire_for` / `try_acquire_until` | — | Cross-platform |
+| `posix_semaphore` | `try_acquire_for` / `try_acquire_until` | — | Linux |
+| `win32_semaphore` | `try_acquire_for` / `try_acquire_until` | `native_handle()` | Windows |
+| `eventfd_semaphore` | `try_acquire_for` / `try_acquire_until` | `native_handle()` | Linux |
+| `kqueue_semaphore` | `try_acquire_for` / `try_acquire_until` | `native_handle()` | macOS/iOS |
+| `mach_semaphore` | `try_acquire_for` / `try_acquire_until` | — | macOS/iOS |
+| `dispatch_semaphore` | `try_acquire_for` / `try_acquire_until` | — | macOS/iOS |
+| `native_async_semaphore` | `try_acquire_for` / `try_acquire_until` | `native_handle()` | Platform-specific alias |
+
+### Platform-specific async semaphores
+
+`win32_semaphore`, `eventfd_semaphore`, `kqueue_semaphore`, and `mach_semaphore` wrap OS primitives and expose `native_handle()` for integration with event loops (Boost.Asio, libdispatch, epoll, Qt, etc.).
+
+```cpp
+nova::sync::counting_semaphore sem(0);
+
+// Producer thread
+sem.release(5);  // add 5 tokens
+
+// Consumer thread
+sem.acquire();   // block until token available; consumes one
+if (sem.try_acquire())  // non-blocking; consumes if available
+    // ... token acquired
+```
+
+Async integration (with `native_async_semaphore`):
+
+```cpp
+nova::sync::native_async_semaphore sem(0);
+
+// Register for async notification when a token becomes available
+auto handle = nova::sync::async_acquire_cancellable(ioc, sem,
+    [](auto result) {
+        if (result) {
+            // Token acquired; use it
+        } else if (result.error() == std::errc::operation_canceled) {
+            // Wait was cancelled
+        }
+    });
+
+handle.cancel();  // abort pending wait
+```
+
 ## Event Types
 
 | Type | Timed waits | Reset | Native handle |

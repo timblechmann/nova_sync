@@ -43,6 +43,20 @@ set(headers
     include/nova/sync/event/support/qt_support.hpp
     include/nova/sync/event/timed_auto_reset_event.hpp
     include/nova/sync/event/timed_manual_reset_event.hpp
+    include/nova/sync/semaphore/concepts.hpp
+    include/nova/sync/semaphore/detail/async_support.hpp
+    include/nova/sync/semaphore/dispatch_semaphore.hpp
+    include/nova/sync/semaphore/eventfd_semaphore.hpp
+    include/nova/sync/semaphore/fast_semaphore.hpp
+    include/nova/sync/semaphore/kqueue_semaphore.hpp
+    include/nova/sync/semaphore/mach_semaphore.hpp
+    include/nova/sync/semaphore/native_async_semaphore.hpp
+    include/nova/sync/semaphore/posix_semaphore.hpp
+    include/nova/sync/semaphore/support/boost_asio_support.hpp
+    include/nova/sync/semaphore/support/libdispatch_support.hpp
+    include/nova/sync/semaphore/support/qt_support.hpp
+    include/nova/sync/semaphore/win32_semaphore.hpp
+
     include/nova/sync/mutex/tsa_annotations.hpp
     include/nova/sync/mutex/apple_os_unfair_mutex.hpp
     include/nova/sync/mutex/concepts.hpp
@@ -75,6 +89,12 @@ set(sources
     source/nova/sync/event/native_manual_reset_event.cpp
     source/nova/sync/event/timed_auto_reset_event.cpp
     source/nova/sync/event/timed_manual_reset_event.cpp
+    source/nova/sync/semaphore/dispatch_semaphore.cpp
+    source/nova/sync/semaphore/eventfd_semaphore.cpp
+    source/nova/sync/semaphore/kqueue_semaphore.cpp
+    source/nova/sync/semaphore/mach_semaphore.cpp
+    source/nova/sync/semaphore/posix_semaphore.cpp
+    source/nova/sync/semaphore/win32_semaphore.cpp
     source/nova/sync/mutex/eventfd_mutex.cpp
     source/nova/sync/mutex/fair_mutex.cpp
     source/nova/sync/mutex/fast_mutex.cpp
@@ -194,14 +214,19 @@ if(NOVA_SYNC_TESTS)
     endif()
 
     add_executable(nova_sync_tests
-        include/nova/sync/event/support/boost_asio_support.hpp # to make clangd happy
+        # to make clangd happy
+        include/nova/sync/event/support/boost_asio_support.hpp
         include/nova/sync/event/support/libdispatch_support.hpp
         include/nova/sync/event/support/qt_support.hpp
         include/nova/sync/event/detail/async_support.hpp
-        include/nova/sync/mutex/support/boost_asio_support.hpp # to make clangd happy
+        include/nova/sync/mutex/support/boost_asio_support.hpp
         include/nova/sync/mutex/support/libdispatch_support.hpp
         include/nova/sync/mutex/support/qt_support.hpp
         include/nova/sync/mutex/detail/async_support.hpp
+        include/nova/sync/semaphore/support/boost_asio_support.hpp
+        include/nova/sync/semaphore/support/libdispatch_support.hpp
+        include/nova/sync/semaphore/support/qt_support.hpp
+        include/nova/sync/semaphore/detail/async_support.hpp
 
         test/event_types.hpp
         test/mutex_types.hpp
@@ -212,6 +237,10 @@ if(NOVA_SYNC_TESTS)
         test/event_test.cpp
         test/event_benchmarks.cpp
         test/event_async_asio_test.cpp
+        test/semaphore_types.hpp
+        test/semaphore_test.cpp
+        test/semaphore_benchmarks.cpp
+        test/semaphore_async_asio_test.cpp
     )
 
     if(WIN32)
@@ -226,6 +255,7 @@ if(NOVA_SYNC_TESTS)
         enable_language(OBJCXX)
         target_sources(nova_sync_tests PRIVATE test/mutex_async_libdispatch_test.mm)
         target_sources(nova_sync_tests PRIVATE test/event_async_libdispatch_test.mm)
+        target_sources(nova_sync_tests PRIVATE test/semaphore_async_libdispatch_test.mm)
         if(FALSE)
             target_compile_options(nova_sync_tests PRIVATE
                 $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>
@@ -255,6 +285,7 @@ if(NOVA_SYNC_TESTS)
         target_compile_definitions(nova_sync_tests PRIVATE NOVA_SYNC_HAS_QT=1)
         target_sources(nova_sync_tests PRIVATE test/mutex_async_qt_test.cpp)
         target_sources(nova_sync_tests PRIVATE test/event_async_qt_test.cpp)
+        target_sources(nova_sync_tests PRIVATE test/semaphore_async_qt_test.cpp)
     endif()
 
     enable_testing()
