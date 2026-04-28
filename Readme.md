@@ -108,6 +108,69 @@ increment();      // Error: mutex not held
 ```
 
 
+### `locked_object<T, Mutex>` — Rust-inspired Thread-Safe Value Wrapper
+
+Type-safe RAII wrapper pairing a value `T` with a `Mutex`, enforcing synchronized access at compile time. The value is only accessible through lock guards. Supports exclusive locking (mutual exclusion) and shared locking (read-write patterns with `std::shared_mutex` or compatible).
+
+**Lock guards:**
+- `locked_object_guard<T, M>`: Exclusive lock with constness determined by T template parameter
+- `shared_locked_object_guard<T, M>`: Shared lock (read-lock) with const access; requires `std::shared_mutex`
+
+**Key feature:** Const instances can acquire exclusive locks (enabling interior mutability patterns while maintaining thread safety).
+
+```cpp
+#include <nova/sync/thread_safety/locked_object.hpp>
+
+nova::sync::locked_object< int > counter( 0 );
+
+// Exclusive lock on non-const instance → mutable access
+{
+    auto guard = counter.lock();  // returns locked_object_guard<int, std::mutex>
+    *guard = 42;
+}
+
+// Const instance can acquire exclusive lock → const access
+const auto& const_counter = counter;
+{
+    auto guard = const_counter.lock();  // returns locked_object_guard<const int, std::mutex>
+    // *guard = 42;  // compile error: const access
+    int val = *guard;  // OK
+}
+
+// Try-lock (non-blocking)
+if (auto guard = counter.try_lock()) {
+    *guard += 1;
+}
+
+// Shared lock (requires std::shared_mutex)
+nova::sync::locked_object< std::vector<int>, std::shared_mutex > data( {} );
+{
+    auto guard = data.lock_shared();  // returns shared_locked_object_guard<...>
+    for (int x : *guard) { /* ... */ }  // concurrent readers allowed
+}
+
+// Higher-order: lock_and (acquire lock, invoke function, auto-release)
+counter.lock_and( [](int& v) {
+    v = 100;
+} );
+
+int squared = counter.lock_and( [](const int& v) {
+    return v * v;
+} );
+
+// Try-lock_and (non-blocking higher-order)
+auto updated = counter.try_lock_and( [](int& v) {
+    v += 10;
+    return v;
+} );  // returns std::optional<int>
+
+// Shared lock higher-order
+int sum = data.lock_shared_and( [](const std::vector<int>& v) {
+    int result = 0;
+    for (int x : v) result += x;
+    return result;
+} );
+```
 
 ### Benchmarks
 

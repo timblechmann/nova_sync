@@ -159,7 +159,7 @@ TEMPLATE_TEST_CASE( "async_semaphore (Qt): future-based qt_async_acquire",
     REQUIRE( future.wait_for( 0ms ) == std::future_status::ready );
 }
 
-TEMPLATE_TEST_CASE( "async_semaphore (Qt): qt_async_acquire_cancellable — cancel stops acquire",
+TEMPLATE_TEST_CASE( "async_semaphore (Qt): qt_async_acquire_cancellable - cancel stops acquire",
                     "[async_semaphore][qt]",
                     NOVA_SYNC_ASYNC_SEMAPHORE_TYPES )
 {
@@ -184,7 +184,7 @@ TEMPLATE_TEST_CASE( "async_semaphore (Qt): qt_async_acquire_cancellable — canc
     REQUIRE( handler_invoked->load() );
 }
 
-TEMPLATE_TEST_CASE( "async_semaphore (Qt): qt_async_acquire_cancellable — destructor auto-cancels",
+TEMPLATE_TEST_CASE( "async_semaphore (Qt): qt_async_acquire_cancellable - destructor auto-cancels",
                     "[async_semaphore][qt]",
                     NOVA_SYNC_ASYNC_SEMAPHORE_TYPES )
 {
