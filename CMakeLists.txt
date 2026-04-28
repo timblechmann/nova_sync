@@ -11,16 +11,18 @@ if (PROJECT_IS_TOP_LEVEL AND NOT CMAKE_MSVC_DEBUG_INFORMATION_FORMAT)
     set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "Embedded")
 endif()
 
-add_custom_target(nova_sync_project_files SOURCES
-    .clang-tidy
-    .gitignore
-    .pre-commit-config.yaml
-    _clang-format
-    Readme.md
-    License.txt
-    tools/bench_plot.py
-    .github/workflows/ci.yml
-)
+if (PROJECT_IS_TOP_LEVEL)
+    add_custom_target(nova_sync_project_files SOURCES
+        .clang-tidy
+        .gitignore
+        .pre-commit-config.yaml
+        _clang-format
+        Readme.md
+        License.txt
+        tools/bench_plot.py
+        .github/workflows/ci.yml
+    )
+endif()
 
 set(headers
     include/nova/sync/detail/async_support.hpp
@@ -103,15 +105,6 @@ target_include_directories(nova_sync PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 
-include(CMakeDependentOption)
-cmake_dependent_option(
-    NOVA_SYNC_TESTS_STRESS_TEST
-    "Run stress tests via ctest"
-    ON
-    "NOVA_SYNC_TESTS"
-    OFF
-)
-
 if(WIN32)
     target_compile_definitions(nova_sync PRIVATE
         NOMINMAX
@@ -122,6 +115,15 @@ endif()
 
 # Testing
 option(NOVA_SYNC_TESTS "Build unit tests" ${PROJECT_IS_TOP_LEVEL})
+include(CMakeDependentOption)
+cmake_dependent_option(
+    NOVA_SYNC_TESTS_STRESS_TEST
+    "Run stress tests via ctest"
+    ON
+    "NOVA_SYNC_TESTS"
+    OFF
+)
+
 if(NOVA_SYNC_TESTS)
     function(nova_sync_install_pmr)
         if (NOT COMMAND CPMAddPackage)
