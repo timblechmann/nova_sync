@@ -40,7 +40,7 @@ set(headers
     include/nova/sync/event/support/qt_support.hpp
     include/nova/sync/event/timed_auto_reset_event.hpp
     include/nova/sync/event/timed_manual_reset_event.hpp
-    include/nova/sync/mutex/annotations.hpp
+    include/nova/sync/mutex/tsa_annotations.hpp
     include/nova/sync/mutex/apple_os_unfair_mutex.hpp
     include/nova/sync/mutex/concepts.hpp
     include/nova/sync/mutex/detail/async_support.hpp
@@ -58,6 +58,7 @@ set(headers
     include/nova/sync/mutex/support/boost_asio_support.hpp
     include/nova/sync/mutex/support/libdispatch_support.hpp
     include/nova/sync/mutex/support/qt_support.hpp
+    include/nova/sync/mutex/tsa_macros.hpp
     include/nova/sync/mutex/win32_critical_section_mutex.hpp
     include/nova/sync/mutex/win32_event_mutex.hpp
     include/nova/sync/mutex/win32_mutex.hpp
@@ -178,6 +179,10 @@ if(NOVA_SYNC_TESTS)
         )
     endif()
 
+    if ("CMAKE_CXX_COMPILER_ID MATCHES Clang OR CMAKE_CXX_COMPILER_ID MATCHES AppleClang")
+        add_compile_options(nova_sync PRIVATE -Wthread-safety)
+    endif()
+
     add_executable(nova_sync_tests
         include/nova/sync/event/support/boost_asio_support.hpp # to make clangd happy
         include/nova/sync/event/support/libdispatch_support.hpp
@@ -262,22 +267,44 @@ if(NOVA_SYNC_TESTS)
     # These are excluded from ALL (not built by default) and must be built
     # explicitly, e.g.:  cmake --build build --target nova_sync_negative_tests
     #
-    # They are only meaningful when NOVA_SYNC_THREAD_SAFETY_ANALYSIS is ON
-    # so they depend on that option.
+    # They are only meaningful on Clang (or compilers supporting -Wthread-safety).
+    # GCC/MSVC will silently ignore TSA attributes and compile successfully.
     # ---------------------------------------------------------------------------
-    if (NOVA_SYNC_THREAD_SAFETY_ANALYSIS)
-        foreach(_neg_test
-            requires_without_lock
-            guarded_by_without_lock
-            excludes_while_holding
-            pt_guarded_by_without_lock
+    set(tsa_tests
+        requires_without_lock
+        guarded_by_without_lock
+        excludes_while_holding
+        pt_guarded_by_without_lock
+        acquired_after_wrong_order
+        release_without_lock
+        shared_lock_write_guarded
+        double_lock_non_reentrant
+    )
+    foreach(_neg_test IN LISTS tsa_tests)
+        add_executable(nova_sync_neg_${_neg_test} EXCLUDE_FROM_ALL
+            test/negative/${_neg_test}.cpp
         )
-            add_executable(nova_sync_neg_${_neg_test} EXCLUDE_FROM_ALL
-                test/negative/${_neg_test}.cpp
+        target_link_libraries(nova_sync_neg_${_neg_test} PRIVATE nova::sync)
+        target_compile_options(nova_sync_neg_${_neg_test} PRIVATE
+            -Wthread-safety -Werror=thread-safety-analysis
+        )
+    endforeach()
+
+    # Register negative compile tests with CTest for Clang-only platforms.
+    # These tests MUST fail to compile (TSA violations). If compilation succeeds,
+    # the test fails. WILL_FAIL reverses this: build success → test FAIL, build
+    # failure → test PASS.
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        foreach(_neg_test IN LISTS tsa_tests)
+            add_test(
+                NAME nova_sync_neg_${_neg_test}
+                COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR}
+                        --target nova_sync_neg_${_neg_test}
+                        --config $<CONFIGURATION>
             )
-            target_link_libraries(nova_sync_neg_${_neg_test} PRIVATE nova::sync)
-            target_compile_options(nova_sync_neg_${_neg_test} PRIVATE
-                -Wthread-safety -Werror=thread-safety-analysis
+            set_tests_properties(nova_sync_neg_${_neg_test} PROPERTIES
+                WILL_FAIL TRUE
+                LABELS "negative;thread-safety"
             )
         endforeach()
     endif()

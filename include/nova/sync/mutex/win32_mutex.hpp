@@ -12,7 +12,7 @@
 
 #  include <chrono>
 #  include <nova/sync/detail/timed_wait.hpp>
-#  include <nova/sync/mutex/annotations.hpp>
+#  include <nova/sync/mutex/tsa_annotations.hpp>
 
 typedef void* HANDLE;
 

@@ -3,35 +3,69 @@
 
 #pragma once
 
-// ---------------------------------------------------------------------------
-// Thread-safety analysis annotations (Clang only).
-//
-// Based on https://clang.llvm.org/docs/ThreadSafetyAnalysis.html
-// All macros expand to nothing on non-Clang compilers.
-//
-// Usage summary:
-//   NOVA_SYNC_CAPABILITY("mutex")         — on a class: marks it as a mutex type
-//   NOVA_SYNC_REENTRANT_CAPABILITY        — on a class: marks it as re-entrant
-//   NOVA_SYNC_SCOPED_CAPABILITY           — on a class: RAII scoped lock
-//   NOVA_SYNC_ACQUIRE(...)                — on lock()    : acquires exclusive capability
-//   NOVA_SYNC_ACQUIRE_SHARED(...)         — on lock_shared(): acquires shared capability
-//   NOVA_SYNC_RELEASE(...)                — on unlock()  : releases exclusive capability
-//   NOVA_SYNC_RELEASE_SHARED(...)         — on unlock_shared(): releases shared capability
-//   NOVA_SYNC_RELEASE_GENERIC(...)        — on unlock()  : releases exclusive or shared
-//   NOVA_SYNC_TRY_ACQUIRE(val, ...)       — on try_lock(): tries to acquire exclusively
-//   NOVA_SYNC_TRY_ACQUIRE_SHARED(val, .)  — on try_lock_shared(): tries to acquire shared
-//   NOVA_SYNC_REQUIRES(...)               — on a function: caller must hold exclusive
-//   NOVA_SYNC_REQUIRES_SHARED(...)        — on a function: caller must hold shared
-//   NOVA_SYNC_EXCLUDES(...)               — on a function: caller must NOT hold
-//   NOVA_SYNC_GUARDED_BY(...)             — on a data member: guarded by given mutex
-//   NOVA_SYNC_PT_GUARDED_BY(...)          — on a pointer member: pointed-to data guarded
-//   NOVA_SYNC_ACQUIRED_BEFORE(...)        — lock ordering constraint
-//   NOVA_SYNC_ACQUIRED_AFTER(...)         — lock ordering constraint
-//   NOVA_SYNC_ASSERT_CAPABILITY(...)      — asserts the capability is held at runtime
-//   NOVA_SYNC_ASSERT_SHARED_CAPABILITY(.) — asserts shared capability is held
-//   NOVA_SYNC_RETURN_CAPABILITY(...)      — on getter: identifies returned capability
-//   NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS   — on a function: opt out of analysis
-// ---------------------------------------------------------------------------
+/// @file tsa_macros.hpp
+/// @brief Thread-safety analysis macro wrappers for Clang TSA.
+///
+/// These macros expand to Clang thread-safety analysis attributes when
+/// supported (`-Wthread-safety`), and to nothing on other compilers.
+///
+/// **Capability Attributes** (declare and annotate synchronization primitives):
+/// - `NOVA_SYNC_CAPABILITY(name)` — Declare a class as a lock/capability
+/// - `NOVA_SYNC_SCOPED_LOCKABLE` — Mark a class as SCOPED_LOCKABLE (auto-releases
+///   on scope exit, e.g., lock_guard, unique_lock)
+/// - `NOVA_SYNC_REENTRANT_CAPABILITY` — Mark a capability as reentrant
+///
+/// **Lock Acquisition Attributes** (functions that acquire locks):
+/// - `NOVA_SYNC_ACQUIRE(...)` — Acquire exclusive lock capability
+/// - `NOVA_SYNC_ACQUIRE_SHARED(...)` — Acquire shared lock capability
+/// - `NOVA_SYNC_TRY_ACQUIRE(...)` — Try to acquire exclusive lock (bool return)
+/// - `NOVA_SYNC_TRY_ACQUIRE_SHARED(...)` — Try to acquire shared lock (bool return)
+///
+/// **Lock Release Attributes** (functions that release locks):
+/// - `NOVA_SYNC_RELEASE(...)` — Release exclusive lock capability
+/// - `NOVA_SYNC_RELEASE_SHARED(...)` — Release shared lock capability
+/// - `NOVA_SYNC_RELEASE_GENERIC(...)` — Release any lock capability
+///
+/// **Precondition Attributes** (declare lock requirements on functions/variables):
+/// - `NOVA_SYNC_REQUIRES(...)` — Requires exclusive lock on entry
+/// - `NOVA_SYNC_REQUIRES_SHARED(...)` — Requires shared lock on entry
+/// - `NOVA_SYNC_EXCLUDES(...)` — Requires lock NOT held on entry
+/// - `NOVA_SYNC_GUARDED_BY(...)` — Variable guarded by lock
+/// - `NOVA_SYNC_PT_GUARDED_BY(...)` — Pointer's pointee guarded by lock
+///
+/// **Lock Order Attributes** (enforce consistent lock acquisition order):
+/// - `NOVA_SYNC_ACQUIRED_BEFORE(...)` — This lock must be acquired before other(s)
+/// - `NOVA_SYNC_ACQUIRED_AFTER(...)` — This lock must be acquired after other(s)
+///
+/// **Assertion Attributes** (assert lock state at a point in code):
+/// - `NOVA_SYNC_ASSERT_CAPABILITY(x)` — Assert capability held (exclusive or shared)
+/// - `NOVA_SYNC_ASSERT_SHARED_CAPABILITY(x)` — Assert shared lock held
+///
+/// **Analysis Control**:
+/// - `NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS` — Disable TSA for a function (use
+///   sparingly: complex runtime logic, move semantics, conditionals)
+///
+/// **Example Usage**:
+/// ```cpp
+/// class spinlock_mutex {
+///   NOVA_SYNC_CAPABILITY("mutex") private:
+///   std::atomic_flag flag_;
+/// public:
+///   NOVA_SYNC_ACQUIRE(this) void lock() { /*...*/ }
+///   NOVA_SYNC_RELEASE(this) void unlock() { /*...*/ }
+/// };
+///
+/// class lock_guard {
+///   NOVA_SYNC_SCOPED_LOCKABLE private:
+///   spinlock_mutex& mtx_;
+/// public:
+///   explicit lock_guard(spinlock_mutex& m) NOVA_SYNC_ACQUIRE(m) : mtx_(m) { m.lock(); }
+///   ~lock_guard() NOVA_SYNC_RELEASE() { mtx_.unlock(); }
+/// };
+///
+/// int counter NOVA_SYNC_GUARDED_BY(mtx);
+/// void increment() NOVA_SYNC_REQUIRES(mtx) { counter++; }
+/// ```
 
 #ifndef __has_attribute
 #  define __has_attribute( x ) 0
@@ -50,9 +84,9 @@
 #endif
 
 #if __has_attribute( scoped_lockable )
-#  define NOVA_SYNC_SCOPED_CAPABILITY __attribute__( ( scoped_lockable ) )
+#  define NOVA_SYNC_SCOPED_LOCKABLE __attribute__( ( scoped_lockable ) )
 #else
-#  define NOVA_SYNC_SCOPED_CAPABILITY
+#  define NOVA_SYNC_SCOPED_LOCKABLE
 #endif
 
 #if __has_attribute( acquire_capability )
@@ -151,11 +185,6 @@
 #  define NOVA_SYNC_ASSERT_SHARED_CAPABILITY( x )
 #endif
 
-#if __has_attribute( lock_returned )
-#  define NOVA_SYNC_RETURN_CAPABILITY( x ) __attribute__( ( lock_returned( x ) ) )
-#else
-#  define NOVA_SYNC_RETURN_CAPABILITY( x )
-#endif
 
 #if __has_attribute( no_thread_safety_analysis )
 #  define NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS __attribute__( ( no_thread_safety_analysis ) )

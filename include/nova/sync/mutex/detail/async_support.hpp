@@ -4,9 +4,9 @@
 #pragma once
 
 #include <nova/sync/detail/async_support.hpp>
-#include <nova/sync/mutex/annotations.hpp>
 #include <nova/sync/mutex/concepts.hpp>
 #include <nova/sync/mutex/support/async_waiter_guard.hpp>
+#include <nova/sync/mutex/tsa_annotations.hpp>
 
 #if defined( NOVA_SYNC_HAS_EXPECTED )
 

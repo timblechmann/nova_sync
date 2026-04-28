@@ -11,7 +11,7 @@
 #ifdef NOVA_SYNC_HAS_WIN32_SRW_MUTEX
 
 #  include <nova/sync/detail/compat.hpp>
-#  include <nova/sync/mutex/annotations.hpp>
+#  include <nova/sync/mutex/tsa_annotations.hpp>
 
 namespace nova::sync {
 
