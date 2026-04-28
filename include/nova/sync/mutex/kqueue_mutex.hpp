@@ -103,7 +103,7 @@ private:
 
 /// @brief Fast async-capable mutex with user-space fast path and kqueue kernel fallback.
 ///
-class alignas( detail::hardware_destructive_interference_size ) NOVA_SYNC_CAPABILITY( "mutex" ) fast_kqueue_mutex
+class NOVA_SYNC_CAPABILITY( "mutex" ) fast_kqueue_mutex
 {
 public:
     /// @brief The native handle type — a POSIX file descriptor.

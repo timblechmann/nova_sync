@@ -15,7 +15,7 @@ namespace nova::sync {
 /// Each `signal()` delivers exactly one token. If a thread is blocked in
 /// `wait()`, it is woken and the token is consumed. Otherwise the token is
 /// stored for the next `wait()` / `try_wait()` call.
-class alignas( detail::hardware_destructive_interference_size ) auto_reset_event
+class auto_reset_event
 {
 public:
     /// @brief Constructs the event.

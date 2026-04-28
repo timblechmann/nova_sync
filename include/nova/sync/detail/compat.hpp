@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <new>
 #include <version>
 
 #if __has_cpp_attribute( gnu::noinline )
@@ -16,10 +15,7 @@
 
 namespace nova::sync::detail {
 
-#ifdef __cpp_lib_hardware_interference_size
-using std::hardware_destructive_interference_size;
-#else
+// 64 on most hardware, but we won't rely on std::hardware_destructive_interference_size to avoid ABI warnings.
 constexpr std::size_t hardware_destructive_interference_size = 64;
-#endif
 
 } // namespace nova::sync::detail
