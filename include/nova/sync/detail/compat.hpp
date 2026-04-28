@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <version>
 
 #if __has_cpp_attribute( gnu::noinline )
