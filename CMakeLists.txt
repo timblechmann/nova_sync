@@ -65,6 +65,7 @@ set(headers
     include/nova/sync/mutex/fair_mutex.hpp
     include/nova/sync/mutex/fast_mutex.hpp
     include/nova/sync/mutex/kqueue_mutex.hpp
+    include/nova/sync/thread_safety/locked_object.hpp
     include/nova/sync/mutex/native_async_mutex.hpp
     include/nova/sync/mutex/pthread_rt_mutex.hpp
     include/nova/sync/mutex/pthread_spinlock_mutex.hpp
@@ -230,6 +231,7 @@ if(NOVA_SYNC_TESTS)
 
         test/event_types.hpp
         test/mutex_types.hpp
+        test/locked_object_test.cpp
         test/mutex_test.cpp
         test/mutex_benchmarks.cpp
         test/mutex_async_asio_test.cpp
