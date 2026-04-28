@@ -143,7 +143,7 @@ void fast_eventfd_mutex::lock_slow() noexcept
                 // eventfd token.  Drain it so subsequent waiters don't see a
                 // spurious wakeup.
                 consume_lock();
-                guard.release(); // waiter count already decremented in the CAS above
+                guard.dismiss(); // waiter count already decremented in the CAS above
                 return;
             }
             continue;
@@ -177,7 +177,7 @@ bool fast_eventfd_mutex::try_lock_for_ns( duration_type rel ) noexcept
                 // async waiter — consume any pending eventfd token to avoid
                 // leaving a stray notification for subsequent waiters.
                 consume_lock();
-                guard.release(); // waiter count already decremented in the CAS above
+                guard.dismiss(); // waiter count already decremented in the CAS above
                 return true;
             }
             continue;
