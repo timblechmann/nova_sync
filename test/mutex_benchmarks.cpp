@@ -23,7 +23,7 @@ static void work()
 {
     volatile int x = 0;
     for ( int j = 0; j < 10; ++j )
-        x += 1;
+        x = x + 1;
 }
 
 TEMPLATE_TEST_CASE( "mutex benchmarks",
