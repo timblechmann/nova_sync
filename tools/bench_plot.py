@@ -53,10 +53,11 @@ def run_catch_xml(binary, extra_args=None):
 
 def extract_benchmarks_from_xml(xml_text):
     """
-    Parse Catch2 XML output and group benchmarks by benchmark name.
+    Parse Catch2 XML output and group benchmarks by (test_case, benchmark_name).
 
-    Returns a mapping: { bench_name -> OrderedDict(subject -> mean_ms) }
-    where 'subject' is the test case subject (e.g. `std::mutex`) and
+    Returns a mapping: { (test_case, bench_name) -> OrderedDict(subject -> mean_ms) }
+    where 'subject' is the test case subject (e.g. `std::mutex`),
+    'test_case' is the TEST_CASE name, 'bench_name' is SECTION name, and
     mean_ms is the benchmark mean in milliseconds.
     """
     grouped = defaultdict(OrderedDict)
@@ -84,32 +85,28 @@ def extract_benchmarks_from_xml(xml_text):
                     continue
 
                 mean_ms = mean_ns / 1e6
+                # Group by (test_case_name, benchmark_name) tuple
+                key = (tc_name, bench_name)
                 # Preserve insertion order for subjects
-                if subject not in grouped[bench_name]:
-                    grouped[bench_name][subject] = mean_ms
+                if subject not in grouped[key]:
+                    grouped[key][subject] = mean_ms
 
     return grouped
 
 
 def plot_group_benchmarks(grouped, out_prefix):
     """
-    Create one SVG per benchmark name (e.g. single-threaded, multi-threaded).
+    Create one SVG per (test_case, benchmark_name) pair.
 
-    grouped: mapping bench_name -> OrderedDict(subject -> mean_ms)
-    out_prefix: base output filename; bench name will be appended.
+    grouped: mapping (test_case, bench_name) -> OrderedDict(subject -> mean_ms)
+    out_prefix: base output filename; test case + bench name will be appended.
     """
-    # Prefer a deterministic order: single-threaded first, then multi-threaded
-    preferred = ["single-threaded", "multi-threaded"]
-    bench_names = []
-    for name in preferred:
-        if name in grouped:
-            bench_names.append(name)
-    for name in grouped.keys():
-        if name not in bench_names:
-            bench_names.append(name)
+    # Sort by (test_case, bench_name) for deterministic output
+    sorted_keys = sorted(grouped.keys())
 
-    for bench_name in bench_names:
-        data = grouped.get(bench_name, {})
+    for bench_key in sorted_keys:
+        tc_name, bench_name = bench_key
+        data = grouped.get(bench_key, {})
         if not data:
             continue
 
@@ -281,7 +278,7 @@ def plot_group_benchmarks(grouped, out_prefix):
                 bot_ax.plot((1 - d, 1 + d), (1 - d, 1 + d), **kwargs)
 
             # Titles/labels
-            axes[0].set_title(f"{bench_name}")
+            axes[0].set_title(f"{tc_name} — {bench_name}")
             axes[-1].set_ylabel("Mean time (ms)", labelpad=12)
 
             # Caption describing thresholds used
@@ -306,7 +303,7 @@ def plot_group_benchmarks(grouped, out_prefix):
             ax.set_xticks(x)
             ax.set_xticklabels(subjects, rotation=45, ha="right", fontsize=9)
             ax.set_ylabel("Mean time (ms)")
-            ax.set_title(f"{bench_name}")
+            ax.set_title(f"{tc_name} — {bench_name}")
 
             top = max_val * 1.10 if max_val > 0 else 1.0
             ax.set_ylim(0, top)
@@ -317,16 +314,17 @@ def plot_group_benchmarks(grouped, out_prefix):
 
             plt.tight_layout()
 
-        # Output filename: append sanitized bench name
-        safe_name = bench_name.replace(" ", "_").replace("/", "_")
-        out_path = f"{os.path.splitext(out_prefix)[0]}_{safe_name}.svg"
+        # Output filename: append sanitized test case and bench name
+        safe_tc_name = tc_name.replace(" ", "_").replace("/", "_").replace(" - ", "_")
+        safe_bench_name = bench_name.replace(" ", "_").replace("/", "_")
+        out_path = f"{os.path.splitext(out_prefix)[0]}_{safe_tc_name}_{safe_bench_name}.svg"
         fig.savefig(out_path, format="svg")
         print(f"Wrote benchmark plot to {out_path}")
 
         # Optionally write CSV with raw values for this bench
         out_csv_base = getattr(plot_group_benchmarks, "_out_csv", None)
         if out_csv_base:
-            csv_path = f"{os.path.splitext(out_csv_base)[0]}_{safe_name}.csv"
+            csv_path = f"{os.path.splitext(out_csv_base)[0]}_{safe_tc_name}_{safe_bench_name}.csv"
             try:
                 with open(csv_path, "w", newline="") as cf:
                     writer = csv.writer(cf)
