@@ -127,11 +127,18 @@ if(NOVA_SYNC_TESTS)
         if (NOT COMMAND CPMAddPackage)
             set(CPM_DOWNLOAD_VERSION 0.42.1)
             if(NOT EXISTS "${CMAKE_BINARY_DIR}/cmake/CPM.cmake")
-            message(STATUS "Downloading CPM.cmake ${CPM_DOWNLOAD_VERSION}...")
-            file(DOWNLOAD
-                "https://github.com/cpm-cmake/CPM.cmake/releases/download/v${CPM_DOWNLOAD_VERSION}/CPM.cmake"
-                "${CMAKE_BINARY_DIR}/cmake/CPM.cmake"
-            )
+                message(STATUS "Downloading CPM.cmake ${CPM_DOWNLOAD_VERSION}...")
+                file(DOWNLOAD
+                    "https://github.com/cpm-cmake/CPM.cmake/releases/download/v${CPM_DOWNLOAD_VERSION}/CPM.cmake"
+                    "${CMAKE_BINARY_DIR}/cmake/CPM.cmake"
+                    STATUS _cpm_download_status
+                    TLS_VERIFY ON
+                )
+                list(GET _cpm_download_status 0 _cpm_download_error)
+                if(_cpm_download_error)
+                    list(GET _cpm_download_status 1 _cpm_download_message)
+                    message(FATAL_ERROR "Failed to download CPM.cmake: ${_cpm_download_message}")
+                endif()
             endif()
             include("${CMAKE_BINARY_DIR}/cmake/CPM.cmake")
         endif()
