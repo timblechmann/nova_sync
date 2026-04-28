@@ -228,7 +228,7 @@ TEMPLATE_TEST_CASE( "native_async_mutex (Qt): mutual exclusion with async acquir
     REQUIRE( *max_concurrent == 1 );
 }
 
-TEMPLATE_TEST_CASE( "qt_async_acquire_cancellable — cancel delivers error to handler",
+TEMPLATE_TEST_CASE( "qt_async_acquire_cancellable - cancel delivers error to handler",
                     "[native_async_mutex][qt]",
                     NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
@@ -258,7 +258,7 @@ TEMPLATE_TEST_CASE( "qt_async_acquire_cancellable — cancel delivers error to h
     REQUIRE( handler_invoked->load() );
 }
 
-TEMPLATE_TEST_CASE( "qt_async_acquire_cancellable — destructor auto-cancels",
+TEMPLATE_TEST_CASE( "qt_async_acquire_cancellable - destructor auto-cancels",
                     "[native_async_mutex][qt]",
                     NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
@@ -289,7 +289,7 @@ TEMPLATE_TEST_CASE( "qt_async_acquire_cancellable — destructor auto-cancels",
     REQUIRE( handler_invoked->load() );
 }
 
-TEMPLATE_TEST_CASE( "qt_async_acquire — futures", "[native_async_mutex][qt]", NOVA_SYNC_ASYNC_MUTEX_TYPES )
+TEMPLATE_TEST_CASE( "qt_async_acquire - futures", "[native_async_mutex][qt]", NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
     using Mtx = TestType;
     Mtx mtx;

@@ -190,7 +190,7 @@ TEMPLATE_TEST_CASE( "async_event (qt): future-based qt_async_wait", "[async_even
 // Tests: cancellation
 // ---------------------------------------------------------------------------
 
-TEMPLATE_TEST_CASE( "async_event (qt): qt_async_wait_cancellable — cancel stops wait",
+TEMPLATE_TEST_CASE( "async_event (qt): qt_async_wait_cancellable - cancel stops wait",
                     "[async_event][qt]",
                     NOVA_SYNC_ASYNC_EVENT_TYPES )
 {
@@ -214,7 +214,7 @@ TEMPLATE_TEST_CASE( "async_event (qt): qt_async_wait_cancellable — cancel stop
     REQUIRE( handler_invoked->load() );
 }
 
-TEMPLATE_TEST_CASE( "async_event (qt): qt_async_wait_cancellable — destructor auto-cancels",
+TEMPLATE_TEST_CASE( "async_event (qt): qt_async_wait_cancellable - destructor auto-cancels",
                     "[async_event][qt]",
                     NOVA_SYNC_ASYNC_EVENT_TYPES )
 {
@@ -244,7 +244,7 @@ TEMPLATE_TEST_CASE( "async_event (qt): qt_async_wait_cancellable — destructor 
 // Tests: manual_reset — all waiters wake on signal
 // ---------------------------------------------------------------------------
 
-TEST_CASE( "async_event (qt): manual_reset_event — signal wakes all waiters", "[async_event][qt]" )
+TEST_CASE( "async_event (qt): manual_reset_event - signal wakes all waiters", "[async_event][qt]" )
 {
     nova::sync::native_manual_reset_event evt;
 

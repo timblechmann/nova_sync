@@ -178,7 +178,7 @@ TEMPLATE_TEST_CASE( "libdispatch: mutual exclusion with async acquires",
     REQUIRE( max_concurrent == 1 );
 }
 
-TEMPLATE_TEST_CASE( "libdispatch — cancellation delivers error to handler",
+TEMPLATE_TEST_CASE( "libdispatch - cancellation delivers error to handler",
                     "[native_async_mutex][libdispatch]",
                     NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
@@ -212,7 +212,7 @@ TEMPLATE_TEST_CASE( "libdispatch — cancellation delivers error to handler",
     REQUIRE( handler_invoked.load() );
 }
 
-TEMPLATE_TEST_CASE( "libdispatch — destructor auto-cancels",
+TEMPLATE_TEST_CASE( "libdispatch - destructor auto-cancels",
                     "[native_async_mutex][libdispatch]",
                     NOVA_SYNC_ASYNC_MUTEX_TYPES )
 {
