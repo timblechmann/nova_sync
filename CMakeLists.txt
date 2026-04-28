@@ -156,12 +156,16 @@ if(NOVA_SYNC_TESTS)
         nova_sync_install_pmr()
         CPMAddPackage(
           NAME Boost
-          VERSION 1.86.0
-          URL https://github.com/boostorg/boost/releases/download/boost-1.86.0/boost-1.86.0-cmake.tar.xz
-          URL_HASH SHA256=2c5ec5edcdff47ff55e27ed9560b0a0b94b07bd07ed9928b476150e16b0efc57
+          VERSION 1.91.0-1
+          URL https://github.com/boostorg/boost/releases/download/boost-1.91.0-1/boost-1.91.0-1-cmake.tar.xz
+          URL_HASH SHA256=cc5dc5006ecbdf0051f90979be31b4eee5987d9ae14ae9fb9c03cfa43fa3cdad
           OPTIONS "BOOST_ENABLE_CMAKE ON" "BOOST_SKIP_INSTALL_RULES ON"
                   "BUILD_SHARED_LIBS OFF" "BOOST_INCLUDE_LIBRARIES asio"
         )
+        if(TARGET boost_context)
+            set_target_properties(boost_context PROPERTIES EXCLUDE_FROM_ALL TRUE)
+        endif()
+
     endif()
 
     if (NOT TARGET tl::expected)
@@ -217,7 +221,11 @@ if(NOVA_SYNC_TESTS)
     endif()
 
     target_link_libraries(nova_sync_tests PRIVATE nova::sync Catch2::Catch2WithMain)
-    target_link_libraries(nova_sync_tests PRIVATE Boost::asio)
+    if(TARGET Boost::asio_core)
+        target_link_libraries(nova_sync_tests PRIVATE Boost::asio_core)
+    else()
+        target_link_libraries(nova_sync_tests PRIVATE Boost::asio)
+    endif()
     target_link_libraries(nova_sync_tests PRIVATE tl::expected)
 
     if(CMAKE_CXX_COMPILER_ID MATCHES Clang OR CMAKE_CXX_COMPILER_ID MATCHES AppleClang)
