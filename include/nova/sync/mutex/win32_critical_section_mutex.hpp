@@ -10,8 +10,8 @@
 
 #ifdef NOVA_SYNC_HAS_WIN32_CRITICAL_SECTION_MUTEX
 
-#  include <nova/sync/mutex/annotations.hpp>
 #  include <nova/sync/mutex/concepts.hpp>
+#  include <nova/sync/mutex/tsa_annotations.hpp>
 
 namespace nova::sync {
 

@@ -91,7 +91,22 @@ std::unique_lock lock = fut.get(); // blocks until acquired; lock.owns_lock() ==
 
 ### Thread Safety Analysis
 
-All mutex types are annotated for Clang's thread safety analysis (`-Wthread-safety`). The `NOVA_SYNC_GUARDED_BY`, `NOVA_SYNC_REQUIRES`, `NOVA_SYNC_EXCLUDES` and related macros (defined in `<nova/sync/mutex/annotations.hpp>`) expand to the corresponding `__attribute__` annotations on Clang and to nothing on other compilers.
+All mutex types are annotated for Clang's thread-safety analysis (`-Wthread-safety`). Macros in `<nova/sync/mutex/tsa_macros.hpp>` map to TSA attributes (e.g., `NOVA_SYNC_GUARDED_BY`, `NOVA_SYNC_REQUIRES`, `NOVA_SYNC_EXCLUDES`, `NOVA_SYNC_ACQUIRE`, `NOVA_SYNC_RELEASE`) on Clang and expand to nothing on other compilers.
+
+**Typical usage:**
+```cpp
+nova::sync::spinlock_mutex mtx;
+int counter NOVA_SYNC_GUARDED_BY(mtx);
+
+void increment() NOVA_SYNC_REQUIRES(mtx) { counter++; }
+
+{
+    nova::sync::lock_guard lock(mtx);
+    increment();  // OK: mtx held by lock_guard
+}
+increment();      // Error: mutex not held
+```
+
 
 
 ### Benchmarks

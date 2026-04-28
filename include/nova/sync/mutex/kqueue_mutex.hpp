@@ -14,8 +14,8 @@
 #  include <chrono>
 #  include <nova/sync/detail/compat.hpp>
 #  include <nova/sync/detail/timed_wait.hpp>
-#  include <nova/sync/mutex/annotations.hpp>
 #  include <nova/sync/mutex/support/async_waiter_guard.hpp>
+#  include <nova/sync/mutex/tsa_annotations.hpp>
 
 namespace nova::sync {
 
@@ -45,7 +45,7 @@ public:
     /// @brief Attempts to acquire the lock, blocking for up to @p rel_ns nanoseconds.
     ///
     /// @return `true` if the lock was acquired, `false` if the duration expired.
-    bool try_lock_for( duration_type rel_ns ) noexcept NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS
+    bool try_lock_for( duration_type rel_ns ) noexcept NOVA_SYNC_TRY_ACQUIRE( true )
     {
         if ( rel_ns.count() <= 0 )
             return try_lock();

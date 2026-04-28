@@ -14,8 +14,8 @@
 #  include <nova/sync/detail/backoff.hpp>
 #  include <nova/sync/detail/compat.hpp>
 #  include <nova/sync/detail/timed_wait.hpp>
-#  include <nova/sync/mutex/annotations.hpp>
 #  include <nova/sync/mutex/support/async_waiter_guard.hpp>
+#  include <nova/sync/mutex/tsa_macros.hpp>
 
 namespace nova::sync {
 
@@ -145,7 +145,7 @@ public:
     ///
     /// @return `true` if the lock was acquired, `false` if the duration expired.
     template < class Rep, class Period >
-    bool try_lock_for( const std::chrono::duration< Rep, Period >& rel_time )
+    bool try_lock_for( const std::chrono::duration< Rep, Period >& rel_time ) noexcept NOVA_SYNC_TRY_ACQUIRE( true )
     {
         return try_lock_for_ns( std::chrono::duration_cast< duration_type >( rel_time ) );
     }
@@ -154,7 +154,8 @@ public:
     ///
     /// @return `true` if the lock was acquired, `false` if the deadline expired.
     template < class Clock, class Duration >
-    bool try_lock_until( const std::chrono::time_point< Clock, Duration >& abs_time )
+    bool try_lock_until( const std::chrono::time_point< Clock, Duration >& abs_time ) noexcept
+        NOVA_SYNC_TRY_ACQUIRE( true )
     {
         if ( try_lock() )
             return true;

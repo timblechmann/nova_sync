@@ -4,12 +4,13 @@
 #include <nova/sync/mutex/fast_mutex.hpp>
 #include <nova/sync/mutex/tsa_annotations.hpp>
 
-struct counter
+struct container
 {
     mutable nova::sync::fast_mutex mtx;
     int value                      NOVA_SYNC_GUARDED_BY( mtx ) { 0 };
 
-    void increment() NOVA_SYNC_REQUIRES( mtx )
+    // Function marked as requiring lock, but called without lock
+    void modify() NOVA_SYNC_REQUIRES( mtx )
     {
         ++value;
     }
@@ -17,6 +18,7 @@ struct counter
 
 int main()
 {
-    counter c;
-    c.increment(); // ERROR: calling REQUIRES function without holding mtx
+    container c;
+    c.modify(); // ERROR: REQUIRES mtx, but mtx is not held
+    return 0;
 }

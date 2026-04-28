@@ -24,21 +24,13 @@ concept lockable = basic_lockable< M > && requires( M& m ) {
     { m.try_lock() } -> std::convertible_to< bool >;
 };
 
-// timed_lockable: lockable + try_lock_for/duration and try_lock_until/time_point
-// Checks two distinct duration and time_point specialisations to enforce that
-// the methods are proper templates (not overloads for a single concrete type).
-// Also requires duration_type, a typedef exposing the effective timeout
-// resolution of the implementation (e.g. nanoseconds for ppoll/kevent,
-// milliseconds for WaitForSingleObject).
+// timed_lockable: lockable + try_lock_for and try_lock_until overloads
+// We check for overloads accepting std::chrono types so both std::timed_mutex
+// and custom timed mutexes are handled.
 template < typename M >
 concept timed_lockable = lockable< M > && requires( M& m ) {
-    // duration_type: effective timeout granularity of the implementation
-    typename M::duration_type;
-    // try_lock_for must be a template accepting any duration specialisation
-    { m.try_lock_for( typename M::duration_type {} ) } -> std::convertible_to< bool >;
-    // try_lock_until must be a template accepting any time_point specialisation
+    { m.try_lock_for( std::chrono::milliseconds( 0 ) ) } -> std::convertible_to< bool >;
     { m.try_lock_until( std::chrono::steady_clock::time_point {} ) } -> std::convertible_to< bool >;
-    { m.try_lock_until( std::chrono::system_clock::time_point {} ) } -> std::convertible_to< bool >;
 };
 
 // shared_lockable: shared ownership semantics
@@ -50,14 +42,10 @@ concept shared_lockable = requires( M& m ) {
 };
 
 // shared_timed_lockable: shared_lockable + timed shared try-locks
-// Checks two distinct specialisations to enforce genericity.
-// Also requires duration_type consistent with timed_lockable.
 template < typename M >
 concept shared_timed_lockable = shared_lockable< M > && requires( M& m ) {
-    typename M::duration_type;
-    { m.try_lock_shared_for( typename M::duration_type {} ) } -> std::convertible_to< bool >;
+    { m.try_lock_shared_for( std::chrono::milliseconds( 0 ) ) } -> std::convertible_to< bool >;
     { m.try_lock_shared_until( std::chrono::steady_clock::time_point {} ) } -> std::convertible_to< bool >;
-    { m.try_lock_shared_until( std::chrono::system_clock::time_point {} ) } -> std::convertible_to< bool >;
 };
 
 // Convenience aliases for the concrete mutex categories

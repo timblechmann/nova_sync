@@ -4,19 +4,23 @@
 #include <nova/sync/mutex/fast_mutex.hpp>
 #include <nova/sync/mutex/tsa_annotations.hpp>
 
-struct counter
+struct container
 {
     mutable nova::sync::fast_mutex mtx;
     int value                      NOVA_SYNC_GUARDED_BY( mtx ) { 0 };
 
-    void increment() NOVA_SYNC_REQUIRES( mtx )
+    void nested_lock() NOVA_SYNC_EXCLUDES( mtx )
     {
+        mtx.lock();
+        mtx.lock(); // ERROR: Non-reentrant mutex locked twice (deadlock risk)
         ++value;
+        mtx.unlock();
+        mtx.unlock();
     }
 };
 
 int main()
 {
-    counter c;
-    c.increment(); // ERROR: calling REQUIRES function without holding mtx
+    container c;
+    c.nested_lock();
 }

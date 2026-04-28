@@ -5,6 +5,7 @@
 
 #include <chrono>
 #include <concepts>
+#include <utility>
 
 namespace nova::sync::concepts {
 
