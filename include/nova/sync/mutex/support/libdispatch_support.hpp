@@ -466,6 +466,10 @@ struct dispatch_acquire_future_state
     std::future< std::unique_lock< Mutex > > future;
 };
 
+template < typename LockType >
+dispatch_acquire_future_state( std::future< LockType > )
+    -> dispatch_acquire_future_state< typename LockType::mutex_type >;
+
 template < typename Mutex >
 NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS dispatch_acquire_future_state< Mutex > async_acquire( Mutex&           mtx,
                                                                                           dispatch_queue_t queue )
