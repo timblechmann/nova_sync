@@ -26,6 +26,7 @@ set(headers
     include/nova/sync/detail/async_support.hpp
     include/nova/sync/detail/backoff.hpp
     include/nova/sync/detail/compat.hpp
+    include/nova/sync/detail/pause.hpp
     include/nova/sync/detail/syscall.hpp
     include/nova/sync/detail/timed_wait.hpp
 
