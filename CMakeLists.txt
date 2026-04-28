@@ -103,13 +103,6 @@ target_include_directories(nova_sync PUBLIC
 
 include(CMakeDependentOption)
 cmake_dependent_option(
-    NOVA_SYNC_THREAD_SAFETY_ANALYSIS
-    "Enable Clang thread-safety analysis (passes -Wthread-safety)"
-    OFF
-    "CMAKE_CXX_COMPILER_ID MATCHES Clang OR CMAKE_CXX_COMPILER_ID MATCHES AppleClang"
-    OFF
-)
-cmake_dependent_option(
     NOVA_SYNC_TESTS_STRESS_TEST
     "Run stress tests via ctest"
     ON
@@ -124,12 +117,6 @@ if(WIN32)
         _WIN32_WINNT=0x0a00
     )
 endif()
-
-if (NOVA_SYNC_THREAD_SAFETY_ANALYSIS)
-    target_compile_options(nova_sync PUBLIC -Wthread-safety)
-endif()
-
-
 
 # Testing
 option(NOVA_SYNC_TESTS "Build unit tests" ${PROJECT_IS_TOP_LEVEL})
@@ -230,7 +217,8 @@ if(NOVA_SYNC_TESTS)
     target_link_libraries(nova_sync_tests PRIVATE Boost::asio)
     target_link_libraries(nova_sync_tests PRIVATE tl::expected)
 
-    if (NOVA_SYNC_THREAD_SAFETY_ANALYSIS)
+    if(CMAKE_CXX_COMPILER_ID MATCHES Clang OR CMAKE_CXX_COMPILER_ID MATCHES AppleClang)
+        target_compile_options(nova_sync_tests PRIVATE -Wthread-safety)
         set_target_properties(nova_sync_tests PROPERTIES COMPILE_WARNING_AS_ERROR ON)
     endif()
 
@@ -246,7 +234,9 @@ if(NOVA_SYNC_TESTS)
     enable_testing()
 
     if (NOT NOVA_SYNC_TESTS_STRESS_TEST)
-        add_test(NAME nova_sync_tests COMMAND nova_sync_tests ~[stress])
+        add_test(NAME nova_sync_tests COMMAND nova_sync_tests -s ~[stress])
+    else()
+        add_test(NAME nova_sync_tests COMMAND nova_sync_tests -s)
     endif()
 
     # ---------------------------------------------------------------------------
