@@ -44,32 +44,6 @@ TEMPLATE_TEST_CASE( "mutex: basic lock/unlock",
         m.unlock();
     }
 
-    SECTION( "mutual exclusion across threads" )
-    {
-        std::atomic< int > counter { 0 };
-
-        const unsigned threads    = std::max( 2u, std::thread::hardware_concurrency() );
-        const unsigned iterations = 5000u; // per-thread
-
-        std::vector< std::thread > ths;
-        ths.reserve( threads );
-
-        for ( unsigned t = 0; t < threads; ++t ) {
-            ths.emplace_back( [ & ] {
-                for ( unsigned i = 0; i < iterations; ++i ) {
-                    m.lock();
-                    ++counter;
-                    m.unlock();
-                }
-            } );
-        }
-
-        for ( auto& t : ths )
-            t.join();
-
-        REQUIRE( counter.load() == int( threads * iterations ) );
-    }
-
     SECTION( "contended waiter wakes after unlock" )
     {
         std::atomic< int > counter { 0 };
@@ -102,6 +76,50 @@ TEMPLATE_TEST_CASE( "mutex: basic lock/unlock",
             t.join();
 
         REQUIRE( counter.load() == int( threads ) );
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// Basic mutex tests — stress tests
+// ---------------------------------------------------------------------------
+
+TEMPLATE_TEST_CASE( "mutex: basic lock/unlock (stress tests)",
+                    "[mutex][stress]",
+                    std::mutex,
+                    std::timed_mutex,
+                    std::recursive_mutex,
+                    std::recursive_timed_mutex,
+                    NOVA_SYNC_ALL_MUTEX_TYPES )
+{
+    using mutex_t = TestType;
+
+    mutex_t m;
+
+    SECTION( "mutual exclusion across threads" )
+    {
+        std::atomic< int > counter { 0 };
+
+        const unsigned threads    = std::max( 2u, std::thread::hardware_concurrency() );
+        const unsigned iterations = 5000u; // per-thread
+
+        std::vector< std::thread > ths;
+        ths.reserve( threads );
+
+        for ( unsigned t = 0; t < threads; ++t ) {
+            ths.emplace_back( [ & ] {
+                for ( unsigned i = 0; i < iterations; ++i ) {
+                    m.lock();
+                    ++counter;
+                    m.unlock();
+                }
+            } );
+        }
+
+        for ( auto& t : ths )
+            t.join();
+
+        REQUIRE( counter.load() == int( threads * iterations ) );
     }
 
     SECTION( "stress test: many locks under contention" )

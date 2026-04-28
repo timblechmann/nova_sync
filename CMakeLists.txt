@@ -147,7 +147,10 @@ if(NOVA_SYNC_TESTS)
                 VERSION 3.14.0
             )
         endblock()
+        list(APPEND CMAKE_MODULE_PATH ${Catch2_SOURCE_DIR}/extras)
     endif()
+    include(CTest)
+    include(Catch)
 
     if (NOT TARGET Boost::asio)
         nova_sync_install_pmr()
@@ -234,9 +237,16 @@ if(NOVA_SYNC_TESTS)
     enable_testing()
 
     if (NOT NOVA_SYNC_TESTS_STRESS_TEST)
-        add_test(NAME nova_sync_tests COMMAND nova_sync_tests -s ~[stress])
+        catch_discover_tests(nova_sync_tests
+            TEST_FILTER ~[stress]
+            PROPERTIES
+                TIMEOUT 20
+        )
     else()
-        add_test(NAME nova_sync_tests COMMAND nova_sync_tests -s)
+        catch_discover_tests(nova_sync_tests
+            PROPERTIES
+                TIMEOUT 50
+        )
     endif()
 
     # ---------------------------------------------------------------------------

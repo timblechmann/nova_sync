@@ -153,45 +153,6 @@ TEMPLATE_TEST_CASE( "manual_reset_event implementations",
         REQUIRE( entered.load() );
     }
 
-    SECTION( "stress — many signal/reset/wait cycles" )
-    {
-        const int          iterations = 500;
-        std::atomic< int > counter { 0 };
-        const unsigned     threads = std::max( 2u, std::thread::hardware_concurrency() );
-
-        thread_guard guard;
-        guard.threads.reserve( threads );
-
-        for ( unsigned t = 0; t < threads; ++t ) {
-            guard.threads.emplace_back( [ & ] {
-                for ( int i = 0; i < iterations; ++i ) {
-                    ev.wait();
-                    ++counter;
-                }
-            } );
-        }
-
-        const int total = int( threads ) * iterations;
-        int       fired = 0;
-
-        while ( fired < total ) {
-            ev.signal();
-            // Let some threads through, then reset so we can pulse again.
-            std::this_thread::yield();
-            ev.reset();
-            fired = counter.load();
-        }
-
-        // Final signal so all threads can drain.
-        ev.signal();
-
-        for ( auto& th : guard.threads )
-            th.join();
-        guard.threads.clear();
-
-        REQUIRE( counter.load() >= total );
-    }
-
     if constexpr ( nova::sync::concepts::timed_event< event_t > ) {
         SECTION( "wait_for returns true when signalled" )
         {
@@ -409,6 +370,60 @@ TEMPLATE_TEST_CASE( "manual_reset_event implementations",
     }
 }
 
+
+// =============================================================================
+// manual_reset_event variants — stress tests
+// =============================================================================
+
+TEMPLATE_TEST_CASE( "manual_reset_event implementations (stress tests)",
+                    "[manual_reset_event][stress]",
+                    nova::sync::manual_reset_event,
+                    nova::sync::timed_manual_reset_event,
+                    nova::sync::native_manual_reset_event )
+{
+    using event_t = TestType;
+    event_t ev;
+
+    SECTION( "stress — many signal/reset/wait cycles" )
+    {
+        const int          iterations = 500;
+        std::atomic< int > counter { 0 };
+        const unsigned     threads = std::max( 2u, std::thread::hardware_concurrency() );
+
+        thread_guard guard;
+        guard.threads.reserve( threads );
+
+        for ( unsigned t = 0; t < threads; ++t ) {
+            guard.threads.emplace_back( [ & ] {
+                for ( int i = 0; i < iterations; ++i ) {
+                    ev.wait();
+                    ++counter;
+                }
+            } );
+        }
+
+        const int total = int( threads ) * iterations;
+        int       fired = 0;
+
+        while ( fired < total ) {
+            ev.signal();
+            // Let some threads through, then reset so we can pulse again.
+            std::this_thread::yield();
+            ev.reset();
+            fired = counter.load();
+        }
+
+        // Final signal so all threads can drain.
+        ev.signal();
+
+        for ( auto& th : guard.threads )
+            th.join();
+        guard.threads.clear();
+
+        REQUIRE( counter.load() >= total );
+    }
+}
+
 // =============================================================================
 // auto_reset_event variants — correctness tests
 // =============================================================================
@@ -486,73 +501,6 @@ TEMPLATE_TEST_CASE( "auto_reset_event implementations",
         guard.threads.clear();
     }
 
-    SECTION( "stress — strict ping-pong producer/consumer" )
-    {
-        event_t            ev_fwd, ev_ack;
-        const int          iterations = 1000;
-        std::atomic< int > consumed { 0 };
-
-        std::thread producer( [ & ] {
-            for ( int i = 0; i < iterations; ++i ) {
-                ev_fwd.signal();
-                ev_ack.wait();
-            }
-        } );
-
-        std::thread consumer( [ & ] {
-            for ( int i = 0; i < iterations; ++i ) {
-                ev_fwd.wait();
-                ++consumed;
-                ev_ack.signal();
-            }
-        } );
-
-        producer.join();
-        consumer.join();
-
-        REQUIRE( consumed.load() == iterations );
-        REQUIRE( !ev_fwd.try_wait() );
-        REQUIRE( !ev_ack.try_wait() );
-    }
-
-    if constexpr ( nova::sync::concepts::auto_reset_event< event_t > && !nova::sync::concepts::timed_event< event_t > ) {
-        SECTION( "stress — concurrent try_wait is race-free" )
-        {
-            const int           pulses = 500;
-            const unsigned      takers = std::max( 2u, std::thread::hardware_concurrency() );
-            std::atomic< int >  consumed { 0 };
-            std::atomic< bool > done { false };
-
-            thread_guard guard;
-            guard.threads.reserve( takers );
-
-            for ( unsigned c = 0; c < takers; ++c ) {
-                guard.threads.emplace_back( [ & ] {
-                    while ( !done.load( std::memory_order_acquire ) ) {
-                        if ( ev.try_wait() )
-                            ++consumed;
-                        else
-                            std::this_thread::yield();
-                    }
-                    if ( ev.try_wait() )
-                        ++consumed;
-                } );
-            }
-
-            for ( int i = 0; i < pulses; ++i ) {
-                ev.signal();
-                std::this_thread::yield();
-            }
-            done.store( true, std::memory_order_release );
-
-            for ( auto& t : guard.threads )
-                t.join();
-            guard.threads.clear();
-
-            REQUIRE( consumed.load() <= pulses );
-        }
-    }
-
     if constexpr ( nova::sync::concepts::timed_event< event_t > ) {
         SECTION( "wait_for returns true when signalled" )
         {
@@ -619,6 +567,88 @@ TEMPLATE_TEST_CASE( "auto_reset_event implementations",
             guard.threads.clear();
 
             REQUIRE( woken.load() == int( n ) );
+        }
+    }
+}
+
+
+// =============================================================================
+// auto_reset_event variants — stress tests
+// =============================================================================
+
+TEMPLATE_TEST_CASE( "auto_reset_event implementations (stress tests)",
+                    "[auto_reset_event][stress]",
+                    nova::sync::auto_reset_event,
+                    nova::sync::timed_auto_reset_event,
+                    nova::sync::native_auto_reset_event )
+{
+    using event_t = TestType;
+    event_t ev;
+
+    SECTION( "stress — strict ping-pong producer/consumer" )
+    {
+        event_t            ev_fwd, ev_ack;
+        const int          iterations = 1000;
+        std::atomic< int > consumed { 0 };
+
+        std::thread producer( [ & ] {
+            for ( int i = 0; i < iterations; ++i ) {
+                ev_fwd.signal();
+                ev_ack.wait();
+            }
+        } );
+
+        std::thread consumer( [ & ] {
+            for ( int i = 0; i < iterations; ++i ) {
+                ev_fwd.wait();
+                ++consumed;
+                ev_ack.signal();
+            }
+        } );
+
+        producer.join();
+        consumer.join();
+
+        REQUIRE( consumed.load() == iterations );
+        REQUIRE( !ev_fwd.try_wait() );
+        REQUIRE( !ev_ack.try_wait() );
+    }
+
+    if constexpr ( nova::sync::concepts::auto_reset_event< event_t > && !nova::sync::concepts::timed_event< event_t > ) {
+        SECTION( "stress — concurrent try_wait is race-free" )
+        {
+            const int           pulses = 500;
+            const unsigned      takers = std::max( 2u, std::thread::hardware_concurrency() );
+            std::atomic< int >  consumed { 0 };
+            std::atomic< bool > done { false };
+
+            thread_guard guard;
+            guard.threads.reserve( takers );
+
+            for ( unsigned c = 0; c < takers; ++c ) {
+                guard.threads.emplace_back( [ & ] {
+                    while ( !done.load( std::memory_order_acquire ) ) {
+                        if ( ev.try_wait() )
+                            ++consumed;
+                        else
+                            std::this_thread::yield();
+                    }
+                    if ( ev.try_wait() )
+                        ++consumed;
+                } );
+            }
+
+            for ( int i = 0; i < pulses; ++i ) {
+                ev.signal();
+                std::this_thread::yield();
+            }
+            done.store( true, std::memory_order_release );
+
+            for ( auto& t : guard.threads )
+                t.join();
+            guard.threads.clear();
+
+            REQUIRE( consumed.load() <= pulses );
         }
     }
 }
