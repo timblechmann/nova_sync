@@ -52,52 +52,66 @@ def run_catch_xml(binary, extra_args=None):
 
 
 def extract_benchmarks_from_xml(xml_text):
+     """
+     Parse Catch2 XML output and group benchmarks by benchmark name.
+
+     Returns a tuple: (grouped, testcase_map) where:
+     - grouped: mapping bench_name -> OrderedDict(subject -> mean_ms)
+     - testcase_map: mapping bench_name -> testcase_name (for filename generation)
+     where 'subject' is the test case subject (e.g. `std::mutex`) and
+     mean_ms is the benchmark mean in milliseconds.
+     """
+     grouped = defaultdict(OrderedDict)
+     testcase_map = {}
+     root = ET.fromstring(xml_text)
+
+     # Iterate over TestCase elements
+     for tc in root.findall("TestCase"):
+         tc_name = tc.get("name", "")
+         # Extract testcase name (part before ' - ') and subject (part after)
+         # e.g. "mutex benchmarks - std::mutex"
+         if " - " in tc_name:
+             testcase_name, subject = tc_name.split(" - ", 1)
+         else:
+             testcase_name = tc_name
+             subject = tc_name
+
+         # For each Section in the TestCase, look for BenchmarkResults
+         for sec in tc.findall("Section"):
+             for br in sec.findall("BenchmarkResults"):
+                 bench_name = br.get("name", "")
+                 mean_elem = br.find("mean")
+                 if mean_elem is None:
+                     continue
+                 val = mean_elem.get("value")
+                 if val is None:
+                     continue
+                 try:
+                     mean_ns = float(val)
+                 except Exception:
+                     continue
+
+                 mean_ms = mean_ns / 1e6
+                 # Preserve insertion order for subjects
+                 if subject not in grouped[bench_name]:
+                     grouped[bench_name][subject] = mean_ms
+                 # Track the testcase name for this benchmark
+                 testcase_map[bench_name] = testcase_name
+
+     return grouped, testcase_map
+
+
+def plot_group_benchmarks(grouped, out_prefix, testcase_map=None):
     """
-    Parse Catch2 XML output and group benchmarks by benchmark name.
-
-    Returns a mapping: { bench_name -> OrderedDict(subject -> mean_ms) }
-    where 'subject' is the test case subject (e.g. `std::mutex`) and
-    mean_ms is the benchmark mean in milliseconds.
-    """
-    grouped = defaultdict(OrderedDict)
-    root = ET.fromstring(xml_text)
-
-    # Iterate over TestCase elements
-    for tc in root.findall("TestCase"):
-        tc_name = tc.get("name", "")
-        # Try to extract the subject after ' - ' (e.g. "mutex benchmarks - std::mutex")
-        subject = tc_name.split(" - ", 1)[1] if " - " in tc_name else tc_name
-
-        # For each Section in the TestCase, look for BenchmarkResults
-        for sec in tc.findall("Section"):
-            for br in sec.findall("BenchmarkResults"):
-                bench_name = br.get("name", "")
-                mean_elem = br.find("mean")
-                if mean_elem is None:
-                    continue
-                val = mean_elem.get("value")
-                if val is None:
-                    continue
-                try:
-                    mean_ns = float(val)
-                except Exception:
-                    continue
-
-                mean_ms = mean_ns / 1e6
-                # Preserve insertion order for subjects
-                if subject not in grouped[bench_name]:
-                    grouped[bench_name][subject] = mean_ms
-
-    return grouped
-
-
-def plot_group_benchmarks(grouped, out_prefix):
-    """
-    Create one SVG per benchmark name (e.g. single-threaded, multi-threaded).
+    Create one SVG per benchmark name, with all subjects grouped together.
 
     grouped: mapping bench_name -> OrderedDict(subject -> mean_ms)
     out_prefix: base output filename; bench name will be appended.
+    testcase_map: optional mapping bench_name -> testcase_name for filename generation
     """
+    if testcase_map is None:
+        testcase_map = {}
+
     # Prefer a deterministic order: single-threaded first, then multi-threaded
     preferred = ["single-threaded", "multi-threaded"]
     bench_names = []
@@ -112,6 +126,8 @@ def plot_group_benchmarks(grouped, out_prefix):
         data = grouped.get(bench_name, {})
         if not data:
             continue
+
+        testcase_name = testcase_map.get(bench_name, "")
 
         # Sort entries by increasing values (the user requested sorted order)
         pairs = list(data.items())
@@ -281,7 +297,7 @@ def plot_group_benchmarks(grouped, out_prefix):
                 bot_ax.plot((1 - d, 1 + d), (1 - d, 1 + d), **kwargs)
 
             # Titles/labels
-            axes[0].set_title(f"{bench_name}")
+            axes[0].set_title(f"{testcase_name} - {bench_name}")
             axes[-1].set_ylabel("Mean time (ms)", labelpad=12)
 
             # Caption describing thresholds used
@@ -306,7 +322,7 @@ def plot_group_benchmarks(grouped, out_prefix):
             ax.set_xticks(x)
             ax.set_xticklabels(subjects, rotation=45, ha="right", fontsize=9)
             ax.set_ylabel("Mean time (ms)")
-            ax.set_title(f"{bench_name}")
+            ax.set_title(f"{testcase_name} - {bench_name}")
 
             top = max_val * 1.10 if max_val > 0 else 1.0
             ax.set_ylim(0, top)
@@ -317,16 +333,17 @@ def plot_group_benchmarks(grouped, out_prefix):
 
             plt.tight_layout()
 
-        # Output filename: append sanitized bench name
-        safe_name = bench_name.replace(" ", "_").replace("/", "_")
-        out_path = f"{os.path.splitext(out_prefix)[0]}_{safe_name}.svg"
+        # Output filename: append sanitized testcase name and bench name
+        safe_testcase = testcase_name.replace(" ", "_").replace("/", "_")
+        safe_bench = bench_name.replace(" ", "_").replace("/", "_")
+        out_path = f"{os.path.splitext(out_prefix)[0]}_{safe_testcase}_{safe_bench}.svg"
         fig.savefig(out_path, format="svg")
         print(f"Wrote benchmark plot to {out_path}")
 
         # Optionally write CSV with raw values for this bench
         out_csv_base = getattr(plot_group_benchmarks, "_out_csv", None)
         if out_csv_base:
-            csv_path = f"{os.path.splitext(out_csv_base)[0]}_{safe_name}.csv"
+            csv_path = f"{os.path.splitext(out_csv_base)[0]}_{safe_testcase}_{safe_bench}.csv"
             try:
                 with open(csv_path, "w", newline="") as cf:
                     writer = csv.writer(cf)
@@ -362,14 +379,14 @@ def main():
         extra += shlex.split(args.runner_args)
 
     xml_text = run_catch_xml(binary, extra_args=extra)
-    grouped = extract_benchmarks_from_xml(xml_text)
+    grouped, testcase_map = extract_benchmarks_from_xml(xml_text)
     if not grouped:
         print("No benchmarks found in test output", file=sys.stderr)
         raise SystemExit(3)
     # Pass mode/out_csv to the plotting function via attributes (simple and avoids changing many signatures)
     setattr(plot_group_benchmarks, "_mode", args.mode)
     setattr(plot_group_benchmarks, "_out_csv", args.out_csv)
-    plot_group_benchmarks(grouped, args.out)
+    plot_group_benchmarks(grouped, args.out, testcase_map)
 
 
 if __name__ == "__main__":
