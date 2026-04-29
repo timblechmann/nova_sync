@@ -141,7 +141,7 @@ private:
         if ( pthread_mutexattr_init( &attr ) != 0 )
             throw std::runtime_error( "pthread_mutexattr_init failed" );
 
-        if ( pthread_mutexattr_setprotocol( &attr, static_cast< int >( Policy ) ) != 0 ) {
+        if ( pthread_mutexattr_setprotocol( &attr, int( Policy ) ) != 0 ) {
             pthread_mutexattr_destroy( &attr );
             throw std::runtime_error( "pthread_mutexattr_setprotocol failed" );
         }

@@ -150,10 +150,7 @@ struct dispatch_acquire_state : std::enable_shared_from_this< dispatch_acquire_s
         waiter_guard_.emplace( mtx_ );
 
         // Create the dispatch source
-        src_ = dispatch_source_create( DISPATCH_SOURCE_TYPE_READ,
-                                       static_cast< uintptr_t >( mtx_.native_handle() ),
-                                       0,
-                                       queue_ );
+        src_ = dispatch_source_create( DISPATCH_SOURCE_TYPE_READ, uintptr_t( mtx_.native_handle() ), 0, queue_ );
 
         // Set the event handler - tries to acquire on each event
         dispatch_source_set_event_handler( src_, [ self = this->shared_from_this() ]() {
@@ -493,10 +490,8 @@ NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS dispatch_acquire_future_state< Mutex > async
 
     *retry_func = [ &mtx, promise, retry_func, queue, wg ]() {
         // Create a new dispatch source for this wait attempt
-        dispatch_source_t src = dispatch_source_create( DISPATCH_SOURCE_TYPE_READ,
-                                                        static_cast< uintptr_t >( mtx.native_handle() ),
-                                                        0,
-                                                        queue );
+        dispatch_source_t src
+            = dispatch_source_create( DISPATCH_SOURCE_TYPE_READ, uintptr_t( mtx.native_handle() ), 0, queue );
 
         dispatch_source_set_event_handler( src, [ &mtx, promise, retry_func, src, queue, wg ] {
             if ( wg->try_acquire() ) {

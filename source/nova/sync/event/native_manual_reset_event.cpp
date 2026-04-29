@@ -90,7 +90,7 @@ void native_manual_reset_event::reset() noexcept
     ::ResetEvent( handle_.get() );
 #elif defined( __linux__ )
     uint64_t val;
-    while ( detail::read_intr( handle_.get(), &val, sizeof( val ) ) == static_cast< ssize_t >( sizeof( val ) ) ) {}
+    while ( detail::read_intr( handle_.get(), &val, sizeof( val ) ) == ssize_t( sizeof( val ) ) ) {}
 #elif defined( __APPLE__ )
     struct kevent ev;
     EV_SET( &ev, 1, EVFILT_USER, EV_DELETE, 0, 0, nullptr );

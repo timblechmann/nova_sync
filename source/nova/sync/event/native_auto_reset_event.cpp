@@ -143,7 +143,7 @@ bool native_auto_reset_event::try_wait() noexcept
     return ::WaitForSingleObject( handle_.get(), 0 ) == WAIT_OBJECT_0;
 #elif defined( __linux__ )
     uint64_t val;
-    return detail::read_intr( handle_.get(), &val, sizeof( val ) ) == static_cast< ssize_t >( sizeof( val ) );
+    return detail::read_intr( handle_.get(), &val, sizeof( val ) ) == ssize_t( sizeof( val ) );
 #elif defined( __APPLE__ )
     // Attempt to consume one token via CAS.
     int s = token_count_.load( std::memory_order_acquire );

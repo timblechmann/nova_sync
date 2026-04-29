@@ -42,7 +42,7 @@ inline ssize_t write_intr( int fd, const void* buf, size_t count ) noexcept
         offset += rc;
     }
 
-    return static_cast< ssize_t >( count );
+    return ssize_t( count );
 }
 inline int poll_intr( struct pollfd* fds, nfds_t nfds ) noexcept
 {
@@ -59,7 +59,7 @@ inline int poll_intr( struct pollfd* fds, nfds_t nfds, std::chrono::milliseconds
     auto start  = clock::now();
 
     while ( true ) {
-        int rem = static_cast< int >( std::chrono::duration_cast< std::chrono::milliseconds >( timeout ).count() );
+        int rem = int( std::chrono::duration_cast< std::chrono::milliseconds >( timeout ).count() );
         int rc  = ::poll( fds, nfds, rem );
         if ( rc < 0 ) {
             if ( errno == EINTR ) {

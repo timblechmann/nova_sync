@@ -130,10 +130,7 @@ struct dispatch_event_wait_state : std::enable_shared_from_this< dispatch_event_
             return;
         }
 
-        src_ = dispatch_source_create( DISPATCH_SOURCE_TYPE_READ,
-                                       static_cast< uintptr_t >( evt_.native_handle() ),
-                                       0,
-                                       queue_ );
+        src_ = dispatch_source_create( DISPATCH_SOURCE_TYPE_READ, uintptr_t( evt_.native_handle() ), 0, queue_ );
 
         dispatch_source_set_event_handler( src_, [ self = this->shared_from_this() ]() {
             if ( self->evt_.try_wait() ) {
@@ -214,10 +211,7 @@ struct dispatch_event_wait_cancellable_state :
             return;
         }
 
-        src_ = dispatch_source_create( DISPATCH_SOURCE_TYPE_READ,
-                                       static_cast< uintptr_t >( evt_.native_handle() ),
-                                       0,
-                                       queue_ );
+        src_ = dispatch_source_create( DISPATCH_SOURCE_TYPE_READ, uintptr_t( evt_.native_handle() ), 0, queue_ );
 
         dispatch_source_set_event_handler( src_, [ self = this->shared_from_this() ] {
             if ( self->cancel_state_->is_cancelled() ) {
@@ -384,10 +378,8 @@ dispatch_event_wait_future_state< Event > async_wait( Event& evt, dispatch_queue
     auto retry_func = std::make_shared< std::function< void() > >();
 
     *retry_func = [ &evt, promise, retry_func, queue ]() {
-        dispatch_source_t src = dispatch_source_create( DISPATCH_SOURCE_TYPE_READ,
-                                                        static_cast< uintptr_t >( evt.native_handle() ),
-                                                        0,
-                                                        queue );
+        dispatch_source_t src
+            = dispatch_source_create( DISPATCH_SOURCE_TYPE_READ, uintptr_t( evt.native_handle() ), 0, queue );
 
         dispatch_source_set_event_handler( src, [ &evt, promise, retry_func, src, queue ] {
             if ( evt.try_wait() ) {
