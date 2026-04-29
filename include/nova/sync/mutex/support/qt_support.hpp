@@ -37,7 +37,7 @@
 /// @endcode
 
 #include <nova/sync/mutex/detail/async_support.hpp>
-#include <nova/sync/mutex/tsa_annotations.hpp>
+#include <nova/sync/thread_safety/annotations.hpp>
 
 #if defined( NOVA_SYNC_HAS_EXPECTED ) && __has_include( <QCoreApplication> )
 

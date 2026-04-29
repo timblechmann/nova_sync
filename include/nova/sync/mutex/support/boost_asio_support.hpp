@@ -8,7 +8,7 @@
 
 #include <nova/sync/mutex/concepts.hpp>
 #include <nova/sync/mutex/detail/async_support.hpp>
-#include <nova/sync/mutex/tsa_annotations.hpp>
+#include <nova/sync/thread_safety/annotations.hpp>
 
 #if __has_include( <boost/asio.hpp>) && defined( NOVA_SYNC_HAS_EXPECTED )
 

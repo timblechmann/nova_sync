@@ -15,7 +15,7 @@
 #  include <nova/sync/detail/compat.hpp>
 #  include <nova/sync/detail/timed_wait.hpp>
 #  include <nova/sync/mutex/support/async_waiter_guard.hpp>
-#  include <nova/sync/mutex/tsa_annotations.hpp>
+#  include <nova/sync/thread_safety/annotations.hpp>
 
 namespace nova::sync {
 

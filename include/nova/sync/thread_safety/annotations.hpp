@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <nova/sync/mutex/tsa_macros.hpp>
+#include <nova/sync/thread_safety/macros.hpp>
 
 // ---------------------------------------------------------------------------
 // tsa_mutex_adapter — annotated wrapper for mutex types.
