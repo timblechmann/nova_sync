@@ -10,7 +10,7 @@
 #  endif
 #endif
 
-#include <nova/sync/mutex/tsa_annotations.hpp>
+#include <nova/sync/thread_safety/annotations.hpp>
 
 namespace nova::sync {
 

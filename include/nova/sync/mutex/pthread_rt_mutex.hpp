@@ -18,7 +18,7 @@
 #  include <stdexcept>
 
 #  include <nova/sync/detail/compat.hpp>
-#  include <nova/sync/mutex/tsa_macros.hpp>
+#  include <nova/sync/thread_safety/macros.hpp>
 
 namespace nova::sync {
 

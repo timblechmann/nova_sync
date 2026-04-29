@@ -57,7 +57,7 @@ set(headers
     include/nova/sync/semaphore/support/qt_support.hpp
     include/nova/sync/semaphore/win32_semaphore.hpp
 
-    include/nova/sync/mutex/tsa_annotations.hpp
+    include/nova/sync/thread_safety/annotations.hpp
     include/nova/sync/mutex/apple_os_unfair_mutex.hpp
     include/nova/sync/mutex/concepts.hpp
     include/nova/sync/mutex/detail/async_support.hpp
@@ -75,7 +75,7 @@ set(headers
     include/nova/sync/mutex/support/boost_asio_support.hpp
     include/nova/sync/mutex/support/libdispatch_support.hpp
     include/nova/sync/mutex/support/qt_support.hpp
-    include/nova/sync/mutex/tsa_macros.hpp
+    include/nova/sync/thread_safety/macros.hpp
     include/nova/sync/mutex/win32_critical_section_mutex.hpp
     include/nova/sync/mutex/win32_event_mutex.hpp
     include/nova/sync/mutex/win32_mutex.hpp

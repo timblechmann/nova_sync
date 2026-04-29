@@ -4,7 +4,7 @@
 #pragma once
 
 #include <nova/sync/mutex/concepts.hpp>
-#include <nova/sync/mutex/tsa_annotations.hpp>
+#include <nova/sync/thread_safety/annotations.hpp>
 
 namespace nova::sync::detail {
 

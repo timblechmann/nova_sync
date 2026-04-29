@@ -8,7 +8,7 @@
 #include <nova/sync/mutex/recursive_spinlock_mutex.hpp>
 #include <nova/sync/mutex/shared_spinlock_mutex.hpp>
 #include <nova/sync/mutex/spinlock_mutex.hpp>
-#include <nova/sync/mutex/tsa_annotations.hpp>
+#include <nova/sync/thread_safety/annotations.hpp>
 
 #include <mutex>
 #include <shared_mutex>

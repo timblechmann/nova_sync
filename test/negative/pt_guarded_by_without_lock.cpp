@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Tim Blechmann
 
 #include <nova/sync/mutex/fast_mutex.hpp>
-#include <nova/sync/mutex/tsa_annotations.hpp>
+#include <nova/sync/thread_safety/annotations.hpp>
 
 struct container
 {

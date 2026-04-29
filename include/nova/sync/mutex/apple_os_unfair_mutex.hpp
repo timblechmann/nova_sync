@@ -11,7 +11,7 @@
 
 #ifdef NOVA_SYNC_HAS_APPLE_OS_UNFAIR_MUTEX
 
-#  include <nova/sync/mutex/tsa_annotations.hpp>
+#  include <nova/sync/thread_safety/annotations.hpp>
 
 namespace nova::sync {
 
