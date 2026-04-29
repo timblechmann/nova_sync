@@ -42,7 +42,7 @@ public:
     /// Blocks for up to @p rel_ns, attempting to acquire a token. Returns `true` if acquired, `false` if timed out.
     bool try_acquire_for( duration_type rel_ns ) noexcept
     {
-        if ( rel_ns.count() <= 0 )
+        if ( rel_ns <= std::chrono::nanoseconds::zero() )
             return try_acquire();
         while ( !try_acquire() ) {
             if ( !detail::ppoll_for( evfd_, rel_ns ) )

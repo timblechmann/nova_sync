@@ -91,7 +91,7 @@ bool kqueue_semaphore::try_acquire() noexcept
 
 bool kqueue_semaphore::try_acquire_for( duration_type rel_ns ) noexcept
 {
-    if ( rel_ns.count() <= 0 )
+    if ( rel_ns <= 0ns )
         return try_acquire();
 
     if ( try_acquire() )

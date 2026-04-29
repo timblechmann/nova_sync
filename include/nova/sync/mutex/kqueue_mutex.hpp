@@ -47,7 +47,7 @@ public:
     /// @return `true` if the lock was acquired, `false` if the duration expired.
     bool try_lock_for( duration_type rel_ns ) noexcept NOVA_SYNC_TRY_ACQUIRE( true )
     {
-        if ( rel_ns.count() <= 0 )
+        if ( rel_ns <= std::chrono::nanoseconds::zero() )
             return try_lock();
         while ( !try_lock() ) {
             if ( !detail::kevent_for( kqfd_, rel_ns ) )

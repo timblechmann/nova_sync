@@ -40,7 +40,7 @@ public:
     [[nodiscard]] bool try_acquire_for( std::chrono::duration< Rep, Period > const& rel_time ) noexcept
     {
         auto ns = std::chrono::duration_cast< std::chrono::nanoseconds >( rel_time );
-        if ( ns.count() <= 0 )
+        if ( ns <= std::chrono::nanoseconds::zero() )
             return try_acquire();
         dispatch_time_t timeout = dispatch_time( DISPATCH_TIME_NOW, int64_t( ns.count() ) );
         return dispatch_semaphore_wait( sem_, timeout ) == 0;
