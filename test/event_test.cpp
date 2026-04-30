@@ -492,7 +492,14 @@ TEMPLATE_TEST_CASE( "auto_reset_event implementations",
         // Signal n times — each signal should wake exactly one thread.
         for ( unsigned i = 0; i < n; ++i ) {
             ev.signal();
-            std::this_thread::sleep_for( 5ms );
+            // Spin-wait for the woken thread to increment the counter.
+            // A fixed sleep is insufficient on loaded CI runners.
+            auto deadline = std::chrono::steady_clock::now() + 2s;
+            while ( woken.load( std::memory_order_acquire ) != int( i + 1 ) ) {
+                if ( std::chrono::steady_clock::now() > deadline )
+                    break;
+                std::this_thread::sleep_for( 1ms );
+            }
             REQUIRE( woken.load() == int( i + 1 ) );
         }
 
