@@ -31,7 +31,7 @@ set(headers
     include/nova/sync/detail/pause.hpp
     include/nova/sync/detail/syscall.hpp
     include/nova/sync/detail/timed_wait.hpp
-
+    include/nova/sync/futex/atomic_wait.hpp
     include/nova/sync/event/auto_reset_event.hpp
     include/nova/sync/event/concepts.hpp
     include/nova/sync/event/detail/async_support.hpp
@@ -86,6 +86,7 @@ set(headers
 set(sources
     source/nova/sync/detail/syscall.cpp
     source/nova/sync/detail/timed_wait.cpp
+    source/nova/sync/futex/atomic_wait.cpp
     source/nova/sync/event/native_auto_reset_event.cpp
     source/nova/sync/event/native_manual_reset_event.cpp
     source/nova/sync/event/timed_auto_reset_event.cpp
@@ -131,6 +132,11 @@ if(WIN32)
         NOMINMAX
         WIN32_LEAN_AND_MEAN
         _WIN32_WINNT=0x0a00
+    )
+
+    target_link_libraries(nova_sync PRIVATE
+        Synchronization.lib
+        Kernel32.lib
     )
 endif()
 
@@ -239,6 +245,7 @@ if(NOVA_SYNC_TESTS)
         test/event_test.cpp
         test/event_benchmarks.cpp
         test/event_async_asio_test.cpp
+        test/futex_test.cpp
         test/semaphore_types.hpp
         test/semaphore_test.cpp
         test/semaphore_benchmarks.cpp

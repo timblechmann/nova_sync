@@ -135,21 +135,33 @@ NOVA_SYNC_HAS_PTHREAD_SPINLOCK_arg              \
 // clang-format off
 #ifdef NOVA_SYNC_HAS_KQUEUE_MUTEX
 #    define NOVA_SYNC_TIMED_MUTEX_TYPES             \
+        nova::sync::fast_mutex,                     \
+        nova::sync::fair_mutex,                     \
         nova::sync::kqueue_mutex,                   \
         nova::sync::fast_kqueue_mutex               \
         NOVA_SYNC_HAS_PTHREAD_RT_MUTEX_arg
 #elif defined( NOVA_SYNC_HAS_EVENTFD_MUTEX )
 #    define NOVA_SYNC_TIMED_MUTEX_TYPES             \
+        nova::sync::fast_mutex,                     \
+        nova::sync::fair_mutex,                     \
         nova::sync::eventfd_mutex,                  \
         nova::sync::fast_eventfd_mutex              \
         NOVA_SYNC_HAS_PTHREAD_RT_MUTEX_arg
 #elif defined( _WIN32 )
 #    define NOVA_SYNC_TIMED_MUTEX_TYPES             \
+        nova::sync::fast_mutex,                     \
+        nova::sync::fair_mutex,                     \
         nova::sync::win32_event_mutex,              \
         nova::sync::win32_mutex
 #elif defined( NOVA_SYNC_HAS_PTHREAD_RT_MUTEX )
 #    define NOVA_SYNC_TIMED_MUTEX_TYPES             \
+        nova::sync::fast_mutex,                     \
+        nova::sync::fair_mutex,                     \
         nova::sync::pthread_priority_inherit_mutex
+#else
+#    define NOVA_SYNC_TIMED_MUTEX_TYPES             \
+        nova::sync::fast_mutex,                     \
+        nova::sync::fair_mutex
 #endif
 // clang-format on
 

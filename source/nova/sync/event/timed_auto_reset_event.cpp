@@ -3,7 +3,7 @@
 
 #include "nova/sync/event/timed_auto_reset_event.hpp"
 
-namespace nova::sync {
+namespace nova::sync::impl {
 
 void timed_auto_reset_event::wait() noexcept
 {
@@ -52,4 +52,4 @@ bool timed_auto_reset_event::on_timed_wait_timeout() noexcept
     }
 }
 
-} // namespace nova::sync
+} // namespace nova::sync::impl

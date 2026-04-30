@@ -4,8 +4,10 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 
 #include <nova/sync/detail/compat.hpp>
+#include <nova/sync/futex/atomic_wait.hpp>
 
 namespace nova::sync {
 
@@ -30,13 +32,13 @@ public:
     void signal() noexcept
     {
         if ( state_.exchange( 1u, std::memory_order_release ) == 0u )
-            state_.notify_all();
+            atomic_notify_all( state_ );
     }
 
     /// @brief Transitions the event back to "not set".
     void reset() noexcept
     {
-        state_.store( 0u, std::memory_order_release );
+        state_.store( 0u, std::memory_order_relaxed );
     }
 
     /// @brief Returns true if the event is currently set, without blocking.
@@ -55,9 +57,28 @@ public:
         // Park: block until the value is no longer 0.
         // Spurious wakeups are handled by the loop.
         while ( state_.load( std::memory_order_relaxed ) == 0u )
-            state_.wait( 0u, std::memory_order_relaxed );
+            atomic_wait( state_, 0u, std::memory_order_acquire );
+    }
 
-        std::atomic_thread_fence( std::memory_order_acquire );
+    template < class Clock, class Duration >
+    [[nodiscard]] bool try_wait_until( std::chrono::time_point< Clock, Duration > const& abs_time ) noexcept
+    {
+        if ( state_.load( std::memory_order_acquire ) != 0 )
+            return true;
+
+        while ( state_.load( std::memory_order_relaxed ) == 0 ) {
+            if ( !atomic_wait_until( state_, 0u, abs_time, std::memory_order_acquire ) ) {
+                return state_.load( std::memory_order_acquire ) != 0;
+            }
+        }
+
+        return true;
+    }
+
+    template < class Rep, class Period >
+    [[nodiscard]] bool try_wait_for( std::chrono::duration< Rep, Period > const& rel_time ) noexcept
+    {
+        return try_wait_until( std::chrono::steady_clock::now() + rel_time );
     }
 
 private:

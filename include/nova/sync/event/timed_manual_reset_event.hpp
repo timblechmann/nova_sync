@@ -11,12 +11,20 @@
 
 #include <nova/sync/detail/compat.hpp>
 
+#if defined( __linux__ ) || defined( _WIN32 )
+#  include "nova/sync/event/manual_reset_event.hpp"
+#else
+
+#endif
+
 namespace nova::sync {
 
 /// @brief Manual-reset event with timed-wait support.
 ///
 /// Once `signal()` is called, all waiters are woken and subsequent `wait()` /
 /// `try_wait()` calls return immediately until `reset()` is called.
+
+namespace impl {
 
 class timed_manual_reset_event
 {
@@ -139,5 +147,18 @@ private:
     std::atomic< uint32_t >                state_;
     std::counting_semaphore< max_waiters > sem_ { 0 };
 };
+
+} // namespace impl
+
+#if defined( __linux__ ) || defined( _WIN32 )
+
+using timed_manual_reset_event = manual_reset_event;
+
+#else
+
+using timed_manual_reset_event = impl::timed_manual_reset_event;
+
+#endif
+
 
 } // namespace nova::sync

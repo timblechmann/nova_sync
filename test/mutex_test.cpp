@@ -380,6 +380,9 @@ TEST_CASE( "mutex: fair_mutex FIFO ordering", "[mutex]" )
 
 #ifdef NOVA_SYNC_TIMED_MUTEX_TYPES
 
+static_assert( nova::sync::concepts::timed_mutex< nova::sync::fast_mutex > );
+static_assert( nova::sync::concepts::timed_mutex< nova::sync::fair_mutex > );
+
 TEMPLATE_TEST_CASE( "mutex: timed locking", "[mutex]", NOVA_SYNC_TIMED_MUTEX_TYPES )
 {
     using mutex_t = TestType;
