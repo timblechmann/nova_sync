@@ -301,7 +301,7 @@ if(NOVA_SYNC_TESTS)
 
     if (NOT NOVA_SYNC_TESTS_STRESS_TEST)
         catch_discover_tests(nova_sync_tests
-            TEST_FILTER ~[stress]
+            TEST_SPEC "~[stress]"
             PROPERTIES
                 TIMEOUT 20
         )
