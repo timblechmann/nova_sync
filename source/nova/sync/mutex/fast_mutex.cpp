@@ -29,7 +29,7 @@ void fast_mutex::lock_slow( uint32_t expected ) noexcept
 
     // Spinning failed, now we need to sleep.
     // To register ourselves as a waiter, we add 2, which increments the waiter count in the upper 31 bits.
-    state_.fetch_add( 2, std::memory_order_acquire );
+    state_.fetch_add( 2, std::memory_order_relaxed );
     expected = state_.load( std::memory_order_relaxed );
 
     while ( true ) {
@@ -39,7 +39,7 @@ void fast_mutex::lock_slow( uint32_t expected ) noexcept
             if ( state_.compare_exchange_weak( expected, desired, std::memory_order_acquire, std::memory_order_relaxed ) )
                 return;
         } else {
-            state_.wait( expected, std::memory_order_relaxed );
+            atomic_wait_for( state_, expected, std::chrono::hours( 24 ) );
             expected = state_.load( std::memory_order_relaxed );
         }
     }

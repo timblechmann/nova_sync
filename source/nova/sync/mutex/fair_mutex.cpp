@@ -26,7 +26,8 @@ void fair_mutex::lock_slow( uint32_t my_ticket ) noexcept
         if ( current_serving == my_ticket )
             return;
 
-        serving_ticket_.wait( current_serving, std::memory_order_relaxed );
+        atomic_wait_for( serving_ticket_, current_serving, std::chrono::hours( 24 ) );
     }
 }
+
 } // namespace nova::sync

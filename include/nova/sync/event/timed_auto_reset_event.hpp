@@ -11,7 +11,12 @@
 
 #include <nova/sync/detail/compat.hpp>
 
+#if defined( __linux__ ) || defined( _WIN32 )
+#  include "nova/sync/event/auto_reset_event.hpp"
+#endif
+
 namespace nova::sync {
+namespace impl {
 
 /// @brief Auto-reset event with timed-wait support.
 ///
@@ -124,5 +129,18 @@ private:
     std::atomic< uint32_t >                state_;
     std::counting_semaphore< max_waiters > sem_ { 0 };
 };
+
+} // namespace impl
+
+#if defined( __linux__ ) || defined( _WIN32 )
+
+using timed_auto_reset_event = auto_reset_event;
+
+#else
+
+using timed_auto_reset_event = impl::timed_auto_reset_event;
+
+#endif
+
 
 } // namespace nova::sync
