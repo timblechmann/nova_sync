@@ -513,7 +513,6 @@ TEMPLATE_TEST_CASE( "mutex: timed locking", "[mutex]", NOVA_SYNC_TIMED_MUTEX_TYP
         } );
 
         started.wait();
-        std::this_thread::sleep_for( 200ms );
 
         std::this_thread::sleep_for( 5s );
         m.unlock();
@@ -546,8 +545,6 @@ TEMPLATE_TEST_CASE( "mutex: timed locking", "[mutex]", NOVA_SYNC_TIMED_MUTEX_TYP
         } );
 
         started.wait();
-        std::this_thread::sleep_for( 200ms );
-
         std::this_thread::sleep_for( 5s );
         m.unlock();
 

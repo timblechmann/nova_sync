@@ -84,11 +84,10 @@ inline int poll_intr( std::span< struct pollfd > fds, std::chrono::milliseconds 
         int rc  = ::poll( fds.data(), nfds_t( fds.size() ), rem );
         if ( rc < 0 ) {
             if ( errno == EINTR ) {
-                auto elapsed = clock::now() - start;
-                if ( elapsed >= timeout )
-                    return 0; // timed out
-                timeout -= std::chrono::duration_cast< std::chrono::milliseconds >( elapsed );
-                continue;
+                timeout -= std::chrono::duration_cast< std::chrono::milliseconds >( clock::now() - start );
+                if ( timeout <= std::chrono::milliseconds::zero() )
+                    return 0; // non-blocking poll interrupted, treat as timeout
+                continue;     // recompute remaining and retry
             }
         }
         return rc;
