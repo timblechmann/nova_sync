@@ -659,3 +659,45 @@ TEMPLATE_TEST_CASE( "auto_reset_event implementations (stress tests)",
         }
     }
 }
+
+#if __has_include( <unistd.h> ) && __has_include( <poll.h> )
+
+#  include <fcntl.h>
+#  include <nova/sync/detail/syscall.hpp>
+#  include <poll.h>
+#  include <unistd.h>
+
+#  include "event_types.hpp"
+
+TEMPLATE_TEST_CASE( "event: poll_intr zero-timeout is non-blocking", "[event]", NOVA_SYNC_ASYNC_MANUAL_EVENT_TYPES )
+{
+    using event_t = TestType;
+
+    // This test verifies that poll_intr with 0ms timeout still calls poll()
+    // and doesn't short-circuit. Previously, the rewrite would return 0
+    // immediately without calling poll(), breaking non-blocking readiness checks.
+
+    // Create a pipe
+    int pipefd[ 2 ];
+    REQUIRE( ::pipe( pipefd ) == 0 );
+
+    struct pollfd pfd { pipefd[ 0 ], POLLIN, 0 };
+
+    // Empty pipe: should return 0 (not readable) with 0ms timeout
+    int rc = nova::sync::detail::poll_intr( pfd, std::chrono::milliseconds( 0 ) );
+    REQUIRE( rc == 0 );
+
+    // Write data
+    uint8_t byte = 1;
+    REQUIRE( ::write( pipefd[ 1 ], &byte, 1 ) == 1 );
+
+    // Now pipe should be readable with 0ms timeout
+    rc = nova::sync::detail::poll_intr( pfd, std::chrono::milliseconds( 0 ) );
+    REQUIRE( rc > 0 );
+
+    // Cleanup
+    ::close( pipefd[ 0 ] );
+    ::close( pipefd[ 1 ] );
+}
+
+#endif // __has_include( <unistd.h> ) && __has_include( <poll.h> )

@@ -235,3 +235,57 @@ TEST_CASE( "atomic_wait_for ping-pong", "[futex][stress]" )
     a.join();
     b.join();
 }
+
+TEST_CASE( "atomic_wait_for: acquire memory ordering with notification", "[futex]" )
+{
+    // This test verifies that atomic_wait_for with acquire order
+    // properly synchronizes memory with the notifier, even on the
+    // portable fallback (condvar-based) implementation.
+
+    std::atomic< int32_t > value( 0 );
+    std::atomic< int >     shared_data( 0 );
+
+    std::thread writer( [ & ] {
+        shared_data.store( 42, std::memory_order_relaxed );
+        value.store( 1, std::memory_order_release );
+        nova::sync::atomic_notify_one( value );
+    } );
+
+    std::thread waiter( [ & ] {
+        // Wait with acquire ordering
+        nova::sync::atomic_wait_for( value, 0, std::chrono::seconds( 1 ), std::memory_order_acquire );
+
+        // With acquire semantics, we should see the write from writer thread
+        int data = shared_data.load( std::memory_order_relaxed );
+        REQUIRE( data == 42 ); // Would fail without acquire fence on weak architectures
+    } );
+
+    writer.join();
+    waiter.join();
+}
+
+TEST_CASE( "atomic_wait_until: acquire memory ordering with notification (steady_clock)", "[futex]" )
+{
+    // Same test but with try_acquire_until overload and steady_clock
+
+    std::atomic< int32_t > value( 0 );
+    std::atomic< int >     shared_data( 0 );
+
+    std::thread writer( [ & ] {
+        shared_data.store( 99, std::memory_order_relaxed );
+        value.store( 1, std::memory_order_release );
+        nova::sync::atomic_notify_one( value );
+    } );
+
+    std::thread waiter( [ & ] {
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds( 1 );
+        nova::sync::atomic_wait_until( value, 0, deadline, std::memory_order_acquire );
+
+        // With acquire semantics, we should see the write from writer thread
+        int data = shared_data.load( std::memory_order_relaxed );
+        REQUIRE( data == 99 );
+    } );
+
+    writer.join();
+    waiter.join();
+}
