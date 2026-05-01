@@ -4,7 +4,7 @@
 #include <catch2/catch_all.hpp>
 
 #include <nova/sync/semaphore/concepts.hpp>
-#include <nova/sync/semaphore/fast_semaphore.hpp>
+#include <nova/sync/semaphore/parking_semaphore.hpp>
 
 #include "semaphore_types.hpp"
 

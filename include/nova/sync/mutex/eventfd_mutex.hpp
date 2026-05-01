@@ -14,14 +14,17 @@
 #  include <nova/sync/detail/backoff.hpp>
 #  include <nova/sync/detail/compat.hpp>
 #  include <nova/sync/detail/timed_wait.hpp>
+#  include <nova/sync/mutex/policies.hpp>
 #  include <nova/sync/mutex/support/async_waiter_guard.hpp>
 #  include <nova/sync/thread_safety/macros.hpp>
 
 namespace nova::sync {
 
+namespace detail {
+
 /// @brief Simple async-capable mutex implemented via Linux `eventfd` in semaphore mode.
 ///
-class NOVA_SYNC_CAPABILITY( "mutex" ) eventfd_mutex
+class NOVA_SYNC_CAPABILITY( "mutex" ) eventfd_mutex_impl
 {
 public:
     /// @brief The native handle type — a POSIX file descriptor.
@@ -30,10 +33,10 @@ public:
     using duration_type      = std::chrono::nanoseconds;
 
     /// @brief Constructs an unlocked eventfd mutex.
-    eventfd_mutex();
-    ~eventfd_mutex();
-    eventfd_mutex( const eventfd_mutex& )            = delete;
-    eventfd_mutex& operator=( const eventfd_mutex& ) = delete;
+    eventfd_mutex_impl();
+    ~eventfd_mutex_impl();
+    eventfd_mutex_impl( const eventfd_mutex_impl& )            = delete;
+    eventfd_mutex_impl& operator=( const eventfd_mutex_impl& ) = delete;
 
     /// @brief Acquires the lock, blocking as necessary.
     void lock() noexcept NOVA_SYNC_ACQUIRE();
@@ -104,18 +107,18 @@ private:
 
 /// @brief Fast async-capable mutex with user-space fast path and eventfd kernel fallback.
 ///
-class NOVA_SYNC_CAPABILITY( "mutex" ) fast_eventfd_mutex
+class NOVA_SYNC_CAPABILITY( "mutex" ) fast_eventfd_mutex_impl
 {
 public:
     /// @brief The native handle type — a POSIX file descriptor.
     using native_handle_type = int;
     using duration_type      = std::chrono::nanoseconds;
 
-    /// @brief Constructs an unlocked fast_eventfd_mutex.
-    fast_eventfd_mutex();
-    ~fast_eventfd_mutex();
-    fast_eventfd_mutex( const fast_eventfd_mutex& )            = delete;
-    fast_eventfd_mutex& operator=( const fast_eventfd_mutex& ) = delete;
+    /// @brief Constructs an unlocked fast_eventfd_mutex_impl.
+    fast_eventfd_mutex_impl();
+    ~fast_eventfd_mutex_impl();
+    fast_eventfd_mutex_impl( const fast_eventfd_mutex_impl& )            = delete;
+    fast_eventfd_mutex_impl& operator=( const fast_eventfd_mutex_impl& ) = delete;
 
     /// @brief Acquires the lock, blocking as necessary.
     void lock() noexcept NOVA_SYNC_ACQUIRE()
@@ -177,7 +180,7 @@ public:
 
             // Register as waiter before calling ppoll_until
             s = add_async_waiter(); // returns state after +2
-            detail::async_waiter_guard< fast_eventfd_mutex > guard( *this, detail::adopt_async_waiter );
+            detail::async_waiter_guard< fast_eventfd_mutex_impl > guard( *this, detail::adopt_async_waiter );
 
             while ( true ) {
                 if ( ( s & 1u ) == 0 ) {
@@ -233,6 +236,28 @@ private:
     void lock_slow() noexcept;
     bool try_lock_for_ns( duration_type rel_ns ) noexcept;
 };
+
+} // namespace detail
+
+//----------------------------------------------------------------------------------------------------------------------
+
+/// @brief Linux eventfd-based async-capable mutex with optional exponential backoff.
+///
+/// Blocking is performed via `ppoll`; the underlying file descriptor is exposed for
+/// integration with event loops (Boost.Asio, Qt, epoll, etc.).
+///
+/// Policy parameters (from `nova/sync/mutex/policies.hpp`):
+///
+/// | Policy         | Effect                                                        |
+/// |----------------|---------------------------------------------------------------|
+/// | `with_backoff` | Spin with exponential backoff before parking via kernel wait. |
+///
+/// Without `with_backoff`, threads park immediately via `ppoll`.
+template < typename... Policies >
+    requires( parameter::valid_parameters< detail::backoff_allowed_tags, Policies... > )
+class NOVA_SYNC_CAPABILITY( "mutex" ) eventfd_mutex :
+    public std::conditional_t< detail::has_backoff_v< Policies... >, detail::fast_eventfd_mutex_impl, detail::eventfd_mutex_impl >
+{};
 
 } // namespace nova::sync
 

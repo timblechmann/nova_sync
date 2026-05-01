@@ -7,10 +7,10 @@
 
 #include <nova/sync/semaphore/dispatch_semaphore.hpp>
 #include <nova/sync/semaphore/eventfd_semaphore.hpp>
-#include <nova/sync/semaphore/fast_semaphore.hpp>
 #include <nova/sync/semaphore/kqueue_semaphore.hpp>
 #include <nova/sync/semaphore/mach_semaphore.hpp>
 #include <nova/sync/semaphore/native_async_semaphore.hpp>
+#include <nova/sync/semaphore/parking_semaphore.hpp>
 #include <nova/sync/semaphore/posix_semaphore.hpp>
 #include <nova/sync/semaphore/win32_semaphore.hpp>
 
