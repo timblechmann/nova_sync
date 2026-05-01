@@ -129,8 +129,11 @@ public:
             int ret = pthread_mutex_timedlock( &mutex_, &ts );
             return ret == 0;
         } else {
-            auto timeout = abs_time - std::chrono::steady_clock::now();
-            return try_lock_until( std::chrono::system_clock::now() + timeout );
+            auto remaining = abs_time - Clock::now();
+            if ( remaining <= std::chrono::nanoseconds::zero() )
+                return try_lock();
+            auto sys_deadline = std::chrono::system_clock::now() + remaining;
+            return try_lock_until( sys_deadline );
         }
     }
 
