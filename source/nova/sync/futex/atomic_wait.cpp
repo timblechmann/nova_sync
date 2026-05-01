@@ -423,14 +423,16 @@ bool atomic_wait_until( std::atomic< int32_t >&                                 
 void atomic_notify_one( std::atomic< int32_t >& atom ) noexcept
 {
     atom.notify_one();
-    auto& b = bucket_for( &atom );
+    auto&           b = bucket_for( &atom );
+    std::lock_guard lock( b.mutex );
     b.cv.notify_one();
 }
 
 void atomic_notify_all( std::atomic< int32_t >& atom ) noexcept
 {
     atom.notify_all();
-    auto& b = bucket_for( &atom );
+    auto&           b = bucket_for( &atom );
+    std::lock_guard lock( b.mutex );
     b.cv.notify_all();
 }
 
