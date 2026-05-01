@@ -144,15 +144,13 @@ public:
                 return true;
 
             if ( !atomic_wait_until( count_, c, abs_time, std::memory_order_acquire ) ) {
-                // Timeout — try to undo
-                c = count_.load( std::memory_order_relaxed );
-                if ( c >= 0 )
-                    return true;
+                // Timeout — try to undo our registration
                 auto restored = count_.fetch_add( 1, std::memory_order_relaxed );
                 if ( restored >= 0 ) {
-                    // A release happened concurrently; consume the token
-                    // The fetch_add already undid our slot, but a release
-                    // was targeted at us. We need to re-acquire.
+                    // A release happened concurrently and granted us a token.
+                    // Our fetch_add(1) undid the registration, but the token was
+                    // meant for us. Re-consume it to maintain the invariant.
+                    count_.fetch_sub( 1, std::memory_order_relaxed );
                     return true;
                 }
                 return false;
