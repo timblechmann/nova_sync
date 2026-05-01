@@ -1,3 +1,5 @@
+#pragma once
+
 /// Semaphore async handlers invoke with `expected<void, error_code>`.
 /// Semaphore acquire completes synchronously; no lock guard returned (cf. events).
 ///
