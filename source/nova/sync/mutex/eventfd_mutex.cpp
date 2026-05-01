@@ -44,20 +44,20 @@ void eventfd_mutex::lock() noexcept
             POLLIN,
             0,
         };
-        detail::poll_intr( &pfd, 1 );
+        detail::poll_intr( pfd );
     }
 }
 
 bool eventfd_mutex::try_lock() noexcept
 {
-    uint64_t val = 0;
-    return detail::read_intr( evfd_, &val, sizeof( val ) ) == sizeof( val );
+    std::array< uint64_t, 1 > val {};
+    return detail::read_intr( evfd_, std::as_writable_bytes( std::span( val ) ) ) == ssize_t( sizeof( uint64_t ) );
 }
 
 void eventfd_mutex::unlock() noexcept
 {
-    const uint64_t one = 1;
-    detail::write_intr( evfd_, &one, sizeof( one ) );
+    const std::array< uint64_t, 1 > one { 1 };
+    detail::write_intr( evfd_, std::as_bytes( std::span( one ) ) );
 }
 
 // ---------------------------------------------------------------------------
@@ -84,15 +84,15 @@ void fast_eventfd_mutex::unlock() noexcept
     uint32_t prev = state_.fetch_and( ~1u, std::memory_order_release );
 
     if ( prev > 1 ) {
-        const uint64_t one = 1;
-        detail::write_intr( evfd_, &one, sizeof( one ) );
+        const std::array< uint64_t, 1 > one { 1 };
+        detail::write_intr( evfd_, std::as_bytes( std::span( one ) ) );
     }
 }
 
 void fast_eventfd_mutex::consume_lock() const noexcept
 {
-    uint64_t val = 0;
-    detail::read_intr( evfd_, &val, sizeof( val ) );
+    std::array< uint64_t, 1 > val {};
+    detail::read_intr( evfd_, std::as_writable_bytes( std::span( val ) ) );
 }
 
 // Slow path for lock acquisition, entered after try_lock() fails.
@@ -154,7 +154,7 @@ void fast_eventfd_mutex::lock_slow() noexcept
             POLLIN,
             0,
         };
-        detail::poll_intr( &pfd, 1 );
+        detail::poll_intr( pfd );
 
         consume_lock();
         s = state_.load( std::memory_order_acquire );
