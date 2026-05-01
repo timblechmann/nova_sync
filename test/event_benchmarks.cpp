@@ -3,10 +3,10 @@
 
 #include <catch2/catch_all.hpp>
 
-#include <nova/sync/event/auto_reset_event.hpp>
-#include <nova/sync/event/manual_reset_event.hpp>
 #include <nova/sync/event/native_auto_reset_event.hpp>
 #include <nova/sync/event/native_manual_reset_event.hpp>
+#include <nova/sync/event/parking_auto_reset_event.hpp>
+#include <nova/sync/event/parking_manual_reset_event.hpp>
 #include <nova/sync/event/timed_auto_reset_event.hpp>
 #include <nova/sync/event/timed_manual_reset_event.hpp>
 

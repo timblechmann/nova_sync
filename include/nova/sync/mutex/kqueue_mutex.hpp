@@ -14,14 +14,17 @@
 #  include <chrono>
 #  include <nova/sync/detail/compat.hpp>
 #  include <nova/sync/detail/timed_wait.hpp>
+#  include <nova/sync/mutex/policies.hpp>
 #  include <nova/sync/mutex/support/async_waiter_guard.hpp>
 #  include <nova/sync/thread_safety/annotations.hpp>
 
 namespace nova::sync {
 
+namespace detail {
+
 /// @brief Simple async-capable mutex implemented via Apple `kqueue` with `EVFILT_USER`.
 ///
-class NOVA_SYNC_CAPABILITY( "mutex" ) kqueue_mutex
+class NOVA_SYNC_CAPABILITY( "mutex" ) kqueue_mutex_impl
 {
 public:
     /// @brief The native handle type — a POSIX file descriptor.
@@ -30,10 +33,10 @@ public:
     using duration_type      = std::chrono::nanoseconds;
 
     /// @brief Constructs an unlocked kqueue mutex.
-    kqueue_mutex();
-    ~kqueue_mutex();
-    kqueue_mutex( const kqueue_mutex& )            = delete;
-    kqueue_mutex& operator=( const kqueue_mutex& ) = delete;
+    kqueue_mutex_impl();
+    ~kqueue_mutex_impl();
+    kqueue_mutex_impl( const kqueue_mutex_impl& )            = delete;
+    kqueue_mutex_impl& operator=( const kqueue_mutex_impl& ) = delete;
 
     /// @brief Acquires the lock, blocking as necessary.
     void lock() noexcept NOVA_SYNC_ACQUIRE();
@@ -103,7 +106,7 @@ private:
 
 /// @brief Fast async-capable mutex with user-space fast path and kqueue kernel fallback.
 ///
-class NOVA_SYNC_CAPABILITY( "mutex" ) fast_kqueue_mutex
+class NOVA_SYNC_CAPABILITY( "mutex" ) fast_kqueue_mutex_impl
 {
 public:
     /// @brief The native handle type — a POSIX file descriptor.
@@ -111,11 +114,11 @@ public:
     /// @brief Effective timeout resolution (kevent timespec is nanosecond-precise).
     using duration_type      = std::chrono::nanoseconds;
 
-    /// @brief Constructs an unlocked fast_kqueue_mutex.
-    fast_kqueue_mutex();
-    ~fast_kqueue_mutex();
-    fast_kqueue_mutex( const fast_kqueue_mutex& )            = delete;
-    fast_kqueue_mutex& operator=( const fast_kqueue_mutex& ) = delete;
+    /// @brief Constructs an unlocked fast_kqueue_mutex_impl.
+    fast_kqueue_mutex_impl();
+    ~fast_kqueue_mutex_impl();
+    fast_kqueue_mutex_impl( const fast_kqueue_mutex_impl& )            = delete;
+    fast_kqueue_mutex_impl& operator=( const fast_kqueue_mutex_impl& ) = delete;
 
     /// @brief Acquires the lock, blocking as necessary.
     void lock() noexcept NOVA_SYNC_ACQUIRE()
@@ -161,25 +164,22 @@ public:
 
         if constexpr ( std::is_same_v< Clock, std::chrono::system_clock >
                        || std::is_same_v< Clock, std::chrono::steady_clock > ) {
-            // Register as async waiter so unlock() will trigger the kevent.
-            auto                                            s = add_async_waiter();
-            detail::async_waiter_guard< fast_kqueue_mutex > guard( *this, detail::adopt_async_waiter );
+            auto                                                 s = add_async_waiter();
+            detail::async_waiter_guard< fast_kqueue_mutex_impl > guard( *this, detail::adopt_async_waiter );
 
             while ( true ) {
                 if ( ( s & 1u ) == 0 ) {
                     uint32_t desired = ( s - 2u ) | 1u;
                     if ( state_.compare_exchange_weak(
                              s, desired, std::memory_order_acquire, std::memory_order_relaxed ) ) {
-                        // CAS succeeded: consume any pending NOTE_TRIGGER.
                         consume_lock();
-                        guard.dismiss(); // waiter count already decremented in CAS
+                        guard.dismiss();
                         return true;
                     }
                     continue;
                 }
 
                 if ( !detail::kevent_until( kqfd_, 1, abs_time ) )
-                    // Timed out — guard destructor calls remove_async_waiter().
                     return try_lock(); // one last attempt after timeout
 
                 consume_lock();
@@ -219,6 +219,28 @@ private:
 
     bool try_lock_for_impl( std::chrono::nanoseconds ) noexcept;
 };
+
+} // namespace detail
+
+//----------------------------------------------------------------------------------------------------------------------
+
+/// @brief Apple kqueue-based async-capable mutex with optional exponential backoff.
+///
+/// Blocks via `kevent` with `EVFILT_USER`; the underlying file descriptor is exposed
+/// for integration with event loops (Boost.Asio, libdispatch, etc.).
+///
+/// Policy parameters (from `nova/sync/mutex/policies.hpp`):
+///
+/// | Policy         | Effect                                                        |
+/// |----------------|---------------------------------------------------------------|
+/// | `with_backoff` | Spin with exponential backoff before parking via kernel wait. |
+///
+/// Without `with_backoff`, threads park immediately via `kevent`.
+template < typename... Policies >
+    requires( parameter::valid_parameters< detail::backoff_allowed_tags, Policies... > )
+class NOVA_SYNC_CAPABILITY( "mutex" ) kqueue_mutex :
+    public std::conditional_t< detail::has_backoff_v< Policies... >, detail::fast_kqueue_mutex_impl, detail::kqueue_mutex_impl >
+{};
 
 } // namespace nova::sync
 

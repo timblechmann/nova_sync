@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // SPDX-FileCopyrightText: 2026 Tim Blechmann
 
-#include <nova/sync/mutex/fast_mutex.hpp>
+#include <nova/sync/mutex/parking_mutex.hpp>
 #include <nova/sync/thread_safety/annotations.hpp>
 
 struct unlocked_caller
 {
-    mutable nova::sync::fast_mutex mtx;
+    mutable nova::sync::parking_mutex<> mtx;
 
     void unlock_without_lock() NOVA_SYNC_REQUIRES( mtx )
     {

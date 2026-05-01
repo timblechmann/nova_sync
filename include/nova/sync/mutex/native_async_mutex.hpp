@@ -27,13 +27,13 @@ using native_async_mutex      = win32_event_mutex;
 
 #elif defined( __APPLE__ )
 
-using native_fast_async_mutex = fast_kqueue_mutex;
-using native_async_mutex      = kqueue_mutex;
+using native_fast_async_mutex = kqueue_mutex< with_backoff >;
+using native_async_mutex      = kqueue_mutex<>;
 
 #elif defined( __linux__ )
 
-using native_fast_async_mutex = fast_eventfd_mutex;
-using native_async_mutex      = eventfd_mutex;
+using native_fast_async_mutex = eventfd_mutex< with_backoff >;
+using native_async_mutex      = eventfd_mutex<>;
 
 #endif
 

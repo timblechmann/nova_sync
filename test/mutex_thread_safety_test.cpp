@@ -3,11 +3,9 @@
 
 #include <catch2/catch_all.hpp>
 
-#include <nova/sync/mutex/fair_mutex.hpp>
-#include <nova/sync/mutex/fast_mutex.hpp>
-#include <nova/sync/mutex/recursive_spinlock_mutex.hpp>
-#include <nova/sync/mutex/shared_spinlock_mutex.hpp>
+#include <nova/sync/mutex/parking_mutex.hpp>
 #include <nova/sync/mutex/spinlock_mutex.hpp>
+#include <nova/sync/mutex/ticket_mutex.hpp>
 #include <nova/sync/thread_safety/annotations.hpp>
 
 #include <mutex>
@@ -137,8 +135,8 @@ TEST_CASE( "thread-safety annotations: shared mutex GUARDED_BY", "[annotations][
 {
     struct shared_counter
     {
-        mutable nova::sync::shared_spinlock_mutex mtx;
-        int value                                 NOVA_SYNC_GUARDED_BY( mtx ) { 0 };
+        mutable nova::sync::shared_spinlock_mutex<> mtx;
+        int value                                   NOVA_SYNC_GUARDED_BY( mtx ) { 0 };
 
         void write( int v ) NOVA_SYNC_EXCLUDES( mtx )
         {
@@ -166,8 +164,8 @@ TEST_CASE( "thread-safety annotations: recursive mutex REENTRANT_CAPABILITY", "[
 {
     struct recursive_counter
     {
-        mutable nova::sync::recursive_spinlock_mutex mtx;
-        int value                                    NOVA_SYNC_GUARDED_BY( mtx ) { 0 };
+        mutable nova::sync::recursive_spinlock_mutex<> mtx;
+        int value                                      NOVA_SYNC_GUARDED_BY( mtx ) { 0 };
 
         void increment()
 #if defined( __clang__ ) && ( __clang_major__ >= 22 )
@@ -280,12 +278,12 @@ TEST_CASE( "tsa_mutex_adapter: try_lock_shared forwarded for std::shared_mutex",
     mtx.unlock_shared();
 }
 
-TEST_CASE( "tsa_mutex_adapter: wraps nova::sync::fast_mutex with GUARDED_BY", "[annotations][tsa_mutex_adapter]" )
+TEST_CASE( "tsa_mutex_adapter: wraps nova::sync::parking_mutex with GUARDED_BY", "[annotations][tsa_mutex_adapter]" )
 {
     struct guarded
     {
-        mutable nova::sync::tsa_mutex_adapter< nova::sync::fast_mutex > mtx;
-        int value                                                       NOVA_SYNC_GUARDED_BY( mtx ) { 0 };
+        mutable nova::sync::tsa_mutex_adapter< nova::sync::parking_mutex<> > mtx;
+        int value                                                            NOVA_SYNC_GUARDED_BY( mtx ) { 0 };
 
         void increment() NOVA_SYNC_EXCLUDES( mtx )
         {
@@ -316,18 +314,18 @@ TEST_CASE( "lock_guard: acquires and releases", "[annotations][lock_guard]" )
 {
     struct guarded
     {
-        mutable nova::sync::spinlock_mutex mtx;
-        int value                          NOVA_SYNC_GUARDED_BY( mtx ) { 0 };
+        mutable nova::sync::spinlock_mutex<> mtx;
+        int value                            NOVA_SYNC_GUARDED_BY( mtx ) { 0 };
 
         void increment() NOVA_SYNC_EXCLUDES( mtx )
         {
-            nova::sync::lock_guard< nova::sync::spinlock_mutex > guard( mtx );
+            nova::sync::lock_guard< nova::sync::spinlock_mutex<> > guard( mtx );
             ++value;
         }
 
         int get() const NOVA_SYNC_EXCLUDES( mtx )
         {
-            nova::sync::lock_guard< nova::sync::spinlock_mutex > guard( mtx );
+            nova::sync::lock_guard< nova::sync::spinlock_mutex<> > guard( mtx );
             return value;
         }
     };
@@ -340,10 +338,10 @@ TEST_CASE( "lock_guard: acquires and releases", "[annotations][lock_guard]" )
 
 TEST_CASE( "lock_guard: adopt_lock does not re-lock", "[annotations][lock_guard]" )
 {
-    nova::sync::spinlock_mutex mtx;
+    nova::sync::spinlock_mutex<> mtx;
     mtx.lock();
     {
-        nova::sync::lock_guard< nova::sync::spinlock_mutex > guard( mtx, std::adopt_lock );
+        nova::sync::lock_guard< nova::sync::spinlock_mutex<> > guard( mtx, std::adopt_lock );
     }
     // mutex is now unlocked — we can lock again
     bool locked = mtx.try_lock();
@@ -369,7 +367,7 @@ TEST_CASE( "tsa_recursive_mutex_adapter: wraps recursive_spinlock_mutex", "[anno
 {
     struct guarded
     {
-        mutable nova::sync::tsa_recursive_mutex_adapter< nova::sync::recursive_spinlock_mutex > mtx;
+        mutable nova::sync::tsa_recursive_mutex_adapter< nova::sync::recursive_spinlock_mutex<> > mtx;
         int value NOVA_SYNC_GUARDED_BY( mtx ) { 0 };
 
         void increment() NOVA_SYNC_EXCLUDES( mtx )
@@ -438,8 +436,8 @@ TEST_CASE( "thread-safety annotations: ACQUIRED_BEFORE lock ordering", "[annotat
 {
     struct double_guarded
     {
-        mutable nova::sync::spinlock_mutex mtx1 NOVA_SYNC_ACQUIRED_BEFORE( mtx2 );
-        mutable nova::sync::spinlock_mutex      mtx2;
+        mutable nova::sync::spinlock_mutex<> mtx1 NOVA_SYNC_ACQUIRED_BEFORE( mtx2 );
+        mutable nova::sync::spinlock_mutex<>      mtx2;
 
         int value1 NOVA_SYNC_GUARDED_BY( mtx1 ) { 1 };
         int value2 NOVA_SYNC_GUARDED_BY( mtx2 ) { 2 };
@@ -463,8 +461,8 @@ TEST_CASE( "thread-safety annotations: ASSERT_CAPABILITY", "[annotations][thread
 {
     struct runtime_checked
     {
-        mutable nova::sync::spinlock_mutex mtx;
-        int value                          NOVA_SYNC_GUARDED_BY( mtx ) { 42 };
+        mutable nova::sync::spinlock_mutex<> mtx;
+        int value                            NOVA_SYNC_GUARDED_BY( mtx ) { 42 };
 
         void assert_is_locked() const NOVA_SYNC_ASSERT_CAPABILITY( mtx )
         {
@@ -490,8 +488,8 @@ TEST_CASE( "thread-safety annotations: ACQUIRED_AFTER lock ordering", "[annotati
 {
     struct double_guarded
     {
-        mutable nova::sync::spinlock_mutex      mtx1;
-        mutable nova::sync::spinlock_mutex mtx2 NOVA_SYNC_ACQUIRED_AFTER( mtx1 );
+        mutable nova::sync::spinlock_mutex<>      mtx1;
+        mutable nova::sync::spinlock_mutex<> mtx2 NOVA_SYNC_ACQUIRED_AFTER( mtx1 );
 
         int value1 NOVA_SYNC_GUARDED_BY( mtx1 ) { 1 };
         int value2 NOVA_SYNC_GUARDED_BY( mtx2 ) { 2 };
@@ -515,8 +513,8 @@ TEST_CASE( "thread-safety annotations: shared capability with REQUIRES_SHARED", 
 {
     struct shared_guarded
     {
-        mutable nova::sync::shared_spinlock_mutex mtx;
-        int value                                 NOVA_SYNC_GUARDED_BY( mtx ) { 99 };
+        mutable nova::sync::shared_spinlock_mutex<> mtx;
+        int value                                   NOVA_SYNC_GUARDED_BY( mtx ) { 99 };
 
         int read_shared() const NOVA_SYNC_REQUIRES_SHARED( mtx )
         {
@@ -562,18 +560,18 @@ TEST_CASE( "lock_guard: works with shared_spinlock_mutex", "[annotations][lock_g
 {
     struct guarded_shared
     {
-        mutable nova::sync::shared_spinlock_mutex mtx;
-        int value                                 NOVA_SYNC_GUARDED_BY( mtx ) { 0 };
+        mutable nova::sync::shared_spinlock_mutex<> mtx;
+        int value                                   NOVA_SYNC_GUARDED_BY( mtx ) { 0 };
 
         void increment() NOVA_SYNC_EXCLUDES( mtx )
         {
-            nova::sync::lock_guard< nova::sync::shared_spinlock_mutex > guard( mtx );
+            nova::sync::lock_guard< nova::sync::shared_spinlock_mutex<> > guard( mtx );
             ++value;
         }
 
         int get() const NOVA_SYNC_EXCLUDES( mtx )
         {
-            nova::sync::lock_guard< nova::sync::shared_spinlock_mutex > guard( mtx );
+            nova::sync::lock_guard< nova::sync::shared_spinlock_mutex<> > guard( mtx );
             return value;
         }
     };

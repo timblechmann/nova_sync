@@ -32,11 +32,7 @@ TEMPLATE_TEST_CASE( "mutex benchmarks",
                     std::timed_mutex,
                     std::recursive_mutex,
                     std::recursive_timed_mutex,
-                    nova::sync::fair_mutex,
-                    nova::sync::fast_mutex,
-                    nova::sync::spinlock_mutex,
-                    nova::sync::recursive_spinlock_mutex,
-                    nova::sync::shared_spinlock_mutex NOVA_SYNC_MUTEX_TEST_EXTRA_TYPES NOVA_SYNC_QT_MUTEX_TYPE )
+                    NOVA_SYNC_ALL_MUTEX_TYPES NOVA_SYNC_QT_MUTEX_TYPE )
 {
     using mutex_t = TestType;
 

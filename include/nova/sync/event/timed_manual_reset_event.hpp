@@ -11,11 +11,7 @@
 
 #include <nova/sync/detail/compat.hpp>
 
-#if defined( __linux__ ) || defined( _WIN32 )
-#  include "nova/sync/event/manual_reset_event.hpp"
-#else
-
-#endif
+#include "nova/sync/event/parking_manual_reset_event.hpp"
 
 namespace nova::sync {
 

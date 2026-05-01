@@ -11,7 +11,7 @@ namespace nova::sync::detail {
 
 struct exponential_backoff
 {
-    int                  backoff    = 1;
+    int                  backoff    = 8;
     static constexpr int spin_limit = 1 << 12;
 
     void run()

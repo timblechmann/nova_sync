@@ -6,8 +6,8 @@
 
 struct shared_guarded
 {
-    mutable nova::sync::shared_spinlock_mutex mtx;
-    int value                                 NOVA_SYNC_GUARDED_BY( mtx ) { 0 };
+    mutable nova::sync::shared_spinlock_mutex<> mtx;
+    int value                                   NOVA_SYNC_GUARDED_BY( mtx ) { 0 };
 
     void read_only() const NOVA_SYNC_REQUIRES_SHARED( mtx )
     {

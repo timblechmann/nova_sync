@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // SPDX-FileCopyrightText: 2026 Tim Blechmann
 
+#include <nova/sync/detail/pause.hpp>
 #include <nova/sync/futex/atomic_wait.hpp>
 
 #include <algorithm>
@@ -8,6 +9,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <thread>
 
 // =============================================================================
 // Platform selection
@@ -48,7 +50,8 @@ namespace nova::sync {
 
 namespace {
 
-int futex_syscall( std::atomic< int32_t >* addr, int op, int32_t val, const struct timespec* timeout, int32_t val3 ) noexcept
+inline int
+futex_syscall( std::atomic< int32_t >* addr, int op, int32_t val, const struct timespec* timeout, int32_t val3 ) noexcept
 {
     return static_cast< int >(
         ::syscall( SYS_futex, reinterpret_cast< int32_t* >( addr ), op, val, timeout, nullptr, val3 ) );
@@ -80,6 +83,8 @@ struct timespec to_abs_timespec( std::chrono::nanoseconds ns_since_epoch ) noexc
 // Acquire fence must precede load for synchronization with notify's release fence.
 // See [atomics.fences] p4/p8: fence(acquire) A synchronizes-with fence(release) B
 // when load Y is sequenced after A and reads value stored before B.
+
+
 inline bool acquire_and_check( std::atomic< int32_t >& atom, int32_t old, std::memory_order order ) noexcept
 {
     if ( order != std::memory_order_relaxed )
@@ -89,24 +94,71 @@ inline bool acquire_and_check( std::atomic< int32_t >& atom, int32_t old, std::m
 
 } // namespace
 
+// void atomic_wait( std::atomic< int32_t >& atom, int32_t old, std::memory_order order ) noexcept
+// {
+//     {
+//         auto load_order = ( order != std::memory_order_relaxed ) ? std::memory_order_acquire :
+//         std::memory_order_relaxed; if ( atom.load( load_order ) != old )
+//             return;
+//     }
+
+//     while ( true ) {
+//         int rc = futex_syscall( &atom, FUTEX_WAIT | FUTEX_PRIVATE_FLAG, old, nullptr, 0 );
+
+//         if ( rc == 0 || ( rc < 0 && errno == EAGAIN ) ) {
+//             if ( acquire_and_check( atom, old, order ) )
+//                 return;
+//             continue;
+//         }
+//         if ( rc < 0 && errno == EINTR )
+//             continue;
+//         return;
+//     }
+// }
+
 void atomic_wait( std::atomic< int32_t >& atom, int32_t old, std::memory_order order ) noexcept
 {
-    {
-        auto load_order = ( order != std::memory_order_relaxed ) ? std::memory_order_acquire : std::memory_order_relaxed;
+    auto load_order = ( order != std::memory_order_relaxed ) ? std::memory_order_acquire : std::memory_order_relaxed;
+
+    // Phase 1: CPU Yielding (Active Spinning with Exponential Backoff)
+    // Avoids the syscall completely if the atomic changes within microseconds.
+    int           pause_count      = 1;
+    constexpr int max_active_spins = 10;
+
+    for ( int i = 0; i < max_active_spins; ++i ) {
         if ( atom.load( load_order ) != old )
             return;
+
+        for ( int j = 0; j < pause_count; ++j )
+            detail::pause();
+
+        pause_count *= 2; // Exponential backoff
     }
 
+    // Phase 2: OS Yielding (Passive Spinning)
+    // The lock is held slightly longer than a few cycles. Surrender our
+    // timeslice so the thread holding the lock has CPU time to release it.
+    constexpr int max_yield_spins = 4;
+    for ( int i = 0; i < max_yield_spins; ++i ) {
+        if ( atom.load( load_order ) != old )
+            return;
+
+        std::this_thread::yield();
+    }
+
+    // Phase 3: Slow Path (OS-Level Blocking Wait)
+    // The condition is taking a long time; fall back to the kernel safely.
     while ( true ) {
         int rc = futex_syscall( &atom, FUTEX_WAIT | FUTEX_PRIVATE_FLAG, old, nullptr, 0 );
 
         if ( rc == 0 || ( rc < 0 && errno == EAGAIN ) ) {
+            // EAGAIN means the futex value changed just as we entered the kernel.
             if ( acquire_and_check( atom, old, order ) )
                 return;
             continue;
         }
         if ( rc < 0 && errno == EINTR )
-            continue;
+            continue; // Interrupted by a signal, try again
         return;
     }
 }

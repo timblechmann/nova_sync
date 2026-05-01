@@ -350,9 +350,9 @@ TEMPLATE_TEST_CASE( "mutex: shared locking", "[mutex]", NOVA_SYNC_SHARED_MUTEX_T
 // Fair mutex — FIFO ordering test
 // ---------------------------------------------------------------------------
 
-TEST_CASE( "mutex: fair_mutex FIFO ordering", "[mutex]" )
+TEST_CASE( "mutex: ticket_mutex FIFO ordering", "[mutex]" )
 {
-    nova::sync::fair_mutex m;
+    nova::sync::ticket_mutex<> m;
 
     const unsigned threads = std::min( 8u, std::max( 2u, std::thread::hardware_concurrency() ) );
 
@@ -415,8 +415,8 @@ TEST_CASE( "mutex: fair_mutex FIFO ordering", "[mutex]" )
 
 #ifdef NOVA_SYNC_TIMED_MUTEX_TYPES
 
-static_assert( nova::sync::concepts::timed_mutex< nova::sync::fast_mutex > );
-static_assert( nova::sync::concepts::timed_mutex< nova::sync::fair_mutex > );
+static_assert( nova::sync::concepts::timed_mutex< nova::sync::parking_mutex< nova::sync::timed > > );
+static_assert( nova::sync::concepts::timed_mutex< nova::sync::ticket_mutex<> > );
 
 TEMPLATE_TEST_CASE( "mutex: timed locking", "[mutex]", NOVA_SYNC_TIMED_MUTEX_TYPES )
 {
@@ -608,7 +608,7 @@ bool set_thread_sched( int policy, int priority )
 
 TEMPLATE_TEST_CASE( "pthread_rt_mutex: prevents priority inversion",
                     "[pthread_rt_mutex][.]",
-                    nova::sync::pthread_priority_ceiling_mutex,
+                    nova::sync::pthread_priority_ceiling_mutex< 30 >,
                     nova::sync::pthread_priority_inherit_mutex,
                     std::mutex )
 {
@@ -622,8 +622,8 @@ TEMPLATE_TEST_CASE( "pthread_rt_mutex: prevents priority inversion",
     REQUIRE( set_thread_sched( SCHED_FIFO, prio_Main ) );
 
     auto m = [] {
-        if constexpr ( std::is_same_v< MutexType, nova::sync::pthread_priority_ceiling_mutex > ) {
-            return MutexType( nova::sync::priority_ceiling( prio_H ) );
+        if constexpr ( std::is_same_v< MutexType, nova::sync::pthread_priority_ceiling_mutex< 30 > > ) {
+            return MutexType();
         } else {
             return MutexType();
         }
@@ -884,31 +884,26 @@ TEMPLATE_TEST_CASE( "mutex: steady_clock try_lock_until", "[mutex]", nova::sync:
     using mutex_t = TestType;
 
     []() NOVA_SYNC_NO_THREAD_SAFETY_ANALYSIS {
-        try {
-            mutex_t mtx;
+        mutex_t mtx;
 
-            // Lock the mutex first
-            mtx.lock();
+        // Lock the mutex first
+        mtx.lock();
 
-            // Try to acquire with steady_clock timeout
-            auto deadline = std::chrono::steady_clock::now() + 10ms;
-            bool acquired = mtx.try_lock_until( deadline );
+        // Try to acquire with steady_clock timeout
+        auto deadline = std::chrono::steady_clock::now() + 10ms;
+        bool acquired = mtx.try_lock_until( deadline );
 
-            // Should timeout (mutex is locked)
-            REQUIRE( acquired == false );
+        // Should timeout (mutex is locked)
+        REQUIRE( acquired == false );
 
-            mtx.unlock();
+        mtx.unlock();
 
-            // Now should succeed
-            deadline = std::chrono::steady_clock::now() + 10ms;
-            acquired = mtx.try_lock_until( deadline );
-            REQUIRE( acquired == true );
+        // Now should succeed
+        deadline = std::chrono::steady_clock::now() + 10ms;
+        acquired = mtx.try_lock_until( deadline );
+        REQUIRE( acquired == true );
 
-            mtx.unlock();
-        } catch ( const std::runtime_error& ) {
-            // pthread_rt_mutex might not be available on all systems
-            SKIP( "pthread_rt_mutex not available" );
-        }
+        mtx.unlock();
     }();
 }
 
