@@ -73,14 +73,14 @@ struct dispatch_semaphore_cancel_state
 
     void cancel() noexcept
     {
-        cancelled.store( true, std::memory_order_release );
+        cancelled.store( true, std::memory_order_seq_cst );
         if ( cancellation_callback_ )
             cancellation_callback_();
     }
 
     bool is_cancelled() const noexcept
     {
-        return cancelled.load( std::memory_order_acquire );
+        return cancelled.load( std::memory_order_seq_cst );
     }
 
     bool try_mark_invoked() noexcept
