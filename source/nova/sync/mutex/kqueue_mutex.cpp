@@ -165,7 +165,7 @@ bool fast_kqueue_mutex::try_lock_for_impl( std::chrono::nanoseconds rel ) noexce
             uint32_t desired = ( s - 2u ) | 1u;
             if ( state_.compare_exchange_weak( s, desired, std::memory_order_acquire, std::memory_order_relaxed ) ) {
                 consume_lock();
-                guard.release();
+                guard.dismiss();
                 return true;
             }
             continue;
