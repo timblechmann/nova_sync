@@ -30,8 +30,8 @@ eventfd_semaphore::~eventfd_semaphore()
 void eventfd_semaphore::release( std::ptrdiff_t n ) noexcept
 {
     assert( n >= 0 && "eventfd_semaphore::release: n must be non-negative" );
-    const uint64_t val = uint64_t( n );
-    detail::write_intr( evfd_, &val, sizeof( val ) );
+    const std::array< uint64_t, 1 > val { uint64_t( n ) };
+    detail::write_intr( evfd_, std::as_bytes( std::span( val ) ) );
 }
 
 void eventfd_semaphore::acquire() noexcept
@@ -42,14 +42,14 @@ void eventfd_semaphore::acquire() noexcept
             POLLIN,
             0,
         };
-        detail::poll_intr( &pfd, 1 );
+        detail::poll_intr( pfd );
     }
 }
 
 bool eventfd_semaphore::try_acquire() noexcept
 {
-    uint64_t val = 0;
-    return detail::read_intr( evfd_, &val, sizeof( val ) ) == sizeof( val );
+    std::array< uint64_t, 1 > val {};
+    return detail::read_intr( evfd_, std::as_writable_bytes( std::span( val ) ) ) == ssize_t( sizeof( uint64_t ) );
 }
 
 } // namespace nova::sync

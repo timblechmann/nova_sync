@@ -35,8 +35,8 @@ native_auto_reset_event::native_auto_reset_event( bool initially_set ) noexcept
 #elif defined( __linux__ )
     handle_.reset( ::eventfd( 0, EFD_CLOEXEC | EFD_NONBLOCK | EFD_SEMAPHORE ) );
     if ( initially_set ) {
-        uint64_t val = 1;
-        detail::write_intr( handle_.get(), &val, sizeof( val ) );
+        const std::array< uint64_t, 1 > val { 1 };
+        detail::write_intr( handle_.get(), std::as_bytes( std::span( val ) ) );
     }
 #elif defined( __APPLE__ )
     handle_.reset( ::kqueue() );
@@ -88,12 +88,12 @@ void native_auto_reset_event::signal() noexcept
     // Only apply idempotency check if no threads are waiting
     if ( wait_count_.load( std::memory_order_acquire ) == 0 ) {
         struct pollfd pfd = { handle_.get(), POLLIN, 0 };
-        if ( detail::poll_intr( &pfd, 1, 0ms ) > 0 ) {
+        if ( detail::try_poll( pfd ) > 0 ) {
             return; // Already set, don't write
         }
     }
-    uint64_t val = 1;
-    detail::write_intr( handle_.get(), &val, sizeof( val ) );
+    std::array< uint64_t, 1 > val { 1 };
+    detail::write_intr( handle_.get(), std::as_bytes( std::span( val ) ) );
 #elif defined( __APPLE__ )
     // Strategy:
     //   • token_count_ tracks unconsumed tokens.
@@ -133,7 +133,7 @@ void native_auto_reset_event::signal() noexcept
     // trigger once a token is consumed.
 #else
     uint8_t dummy = 1;
-    detail::write_intr( fds_[ 1 ].get(), &dummy, 1 );
+    detail::write_intr( fds_[ 1 ].get(), std::as_bytes( std::span( &dummy, 1 ) ) );
 #endif
 }
 
@@ -142,8 +142,8 @@ bool native_auto_reset_event::try_wait() noexcept
 #if defined( _WIN32 )
     return ::WaitForSingleObject( handle_.get(), 0 ) == WAIT_OBJECT_0;
 #elif defined( __linux__ )
-    uint64_t val;
-    return detail::read_intr( handle_.get(), &val, sizeof( val ) ) == ssize_t( sizeof( val ) );
+    std::array< uint64_t, 1 > val {};
+    return detail::read_intr( handle_.get(), as_writable_bytes( std::span( val ) ) ) == sizeof( uint64_t );
 #elif defined( __APPLE__ )
     // Attempt to consume one token via CAS.
     int s = token_count_.load( std::memory_order_acquire );
@@ -155,7 +155,7 @@ bool native_auto_reset_event::try_wait() noexcept
 #else
     uint8_t buf[ 128 ];
     bool    signaled = false;
-    while ( detail::read_intr( fds_[ 0 ].get(), buf, sizeof( buf ) ) > 0 )
+    while ( detail::read_intr( fds_[ 0 ].get(), std::as_writable_bytes( std::span( buf ) ) ) > 0 )
         signaled = true;
     return signaled;
 #endif
@@ -169,7 +169,7 @@ void native_auto_reset_event::wait() noexcept
     wait_count_.fetch_add( 1, std::memory_order_acquire );
     while ( !try_wait() ) {
         struct pollfd pfd = { handle_.get(), POLLIN, 0 };
-        detail::poll_intr( &pfd, 1 );
+        detail::poll_intr( pfd );
     }
     wait_count_.fetch_sub( 1, std::memory_order_release );
 #elif defined( __APPLE__ )
@@ -206,7 +206,7 @@ void native_auto_reset_event::wait() noexcept
 #else
     while ( !try_wait() ) {
         struct pollfd pfd = { native_handle(), POLLIN, 0 };
-        detail::poll_intr( &pfd, 1 );
+        detail::poll_intr( pfd );
     }
 #endif
 }
@@ -255,7 +255,7 @@ bool native_auto_reset_event::try_wait_for( duration_type timeout ) noexcept
     return result;
 #  else
     struct pollfd pfd = { native_handle(), POLLIN, 0 };
-    detail::poll_intr( &pfd, 1, timeout );
+    detail::poll_intr( pfd, timeout );
     return try_wait();
 #  endif
 #endif

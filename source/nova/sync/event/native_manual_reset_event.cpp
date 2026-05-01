@@ -8,6 +8,7 @@
 #if defined( _WIN32 )
 #  include <windows.h>
 #else
+#  include <array>
 #  include <fcntl.h>
 #  include <poll.h>
 #  include <unistd.h>
@@ -67,9 +68,9 @@ void native_manual_reset_event::signal() noexcept
     ::SetEvent( handle_.get() );
 #elif defined( __linux__ )
     struct pollfd pfd = { handle_.get(), POLLIN, 0 };
-    if ( detail::poll_intr( &pfd, 1, 0ms ) == 0 ) {
-        uint64_t val = 1;
-        detail::write_intr( handle_.get(), &val, sizeof( val ) );
+    if ( detail::try_poll( pfd ) == 0 ) {
+        const std::array< uint64_t, 1 > val { 1 };
+        detail::write_intr( handle_.get(), std::as_bytes( std::span( val ) ) );
     }
 #elif defined( __APPLE__ )
     struct kevent ev;
@@ -77,9 +78,9 @@ void native_manual_reset_event::signal() noexcept
     ::kevent( handle_.get(), &ev, 1, nullptr, 0, nullptr );
 #else
     struct pollfd pfd = { fds_[ 0 ].get(), POLLIN, 0 };
-    if ( detail::poll_intr( &pfd, 1, 0ms ) == 0 ) {
+    if ( detail::try_poll( pfd ) == 0 ) {
         uint8_t dummy = 1;
-        detail::write_intr( fds_[ 1 ].get(), &dummy, 1 );
+        detail::write_intr( fds_[ 1 ].get(), std::as_bytes( std::span( &dummy, 1 ) ) );
     }
 #endif
 }
@@ -89,8 +90,9 @@ void native_manual_reset_event::reset() noexcept
 #if defined( _WIN32 )
     ::ResetEvent( handle_.get() );
 #elif defined( __linux__ )
-    uint64_t val;
-    while ( detail::read_intr( handle_.get(), &val, sizeof( val ) ) == ssize_t( sizeof( val ) ) ) {}
+    std::array< uint64_t, 1 > val {};
+    while ( detail::read_intr( handle_.get(), std::as_writable_bytes( std::span( val ) ) )
+            == ssize_t( sizeof( uint64_t ) ) ) {}
 #elif defined( __APPLE__ )
     struct kevent ev;
     EV_SET( &ev, 1, EVFILT_USER, EV_DELETE, 0, 0, nullptr );
@@ -99,7 +101,7 @@ void native_manual_reset_event::reset() noexcept
     ::kevent( handle_.get(), &ev, 1, nullptr, 0, nullptr );
 #else
     uint8_t buf[ 128 ];
-    while ( detail::read_intr( fds_[ 0 ].get(), buf, sizeof( buf ) ) > 0 ) {}
+    while ( detail::read_intr( fds_[ 0 ].get(), std::as_writable_bytes( std::span( buf ) ) ) > 0 ) {}
 #endif
 }
 
@@ -109,7 +111,7 @@ bool native_manual_reset_event::try_wait() const noexcept
     return ::WaitForSingleObject( handle_.get(), 0 ) == WAIT_OBJECT_0;
 #else
     struct pollfd pfd = { native_handle(), POLLIN, 0 };
-    int           rc  = detail::poll_intr( &pfd, 1, 0ms );
+    int           rc  = detail::try_poll( pfd );
     return rc > 0;
 #endif
 }
@@ -121,7 +123,7 @@ void native_manual_reset_event::wait() const noexcept
 #else
     while ( !try_wait() ) {
         struct pollfd pfd = { native_handle(), POLLIN, 0 };
-        detail::poll_intr( &pfd, 1 );
+        detail::poll_intr( pfd );
     }
 #endif
 }
@@ -144,7 +146,7 @@ bool native_manual_reset_event::try_wait_for( duration_type timeout ) const noex
     return false;
 #  else
     struct pollfd pfd = { native_handle(), POLLIN, 0 };
-    int           rc  = detail::poll_intr( &pfd, 1, timeout );
+    int           rc  = detail::poll_intr( pfd, timeout );
     if ( rc <= 0 )
         return try_wait();
     return try_wait();
