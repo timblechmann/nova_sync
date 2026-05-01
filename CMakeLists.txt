@@ -217,8 +217,8 @@ if(NOVA_SYNC_TESTS)
         )
     endif()
 
-    if ("CMAKE_CXX_COMPILER_ID MATCHES Clang OR CMAKE_CXX_COMPILER_ID MATCHES AppleClang")
-        add_compile_options(nova_sync PRIVATE -Wthread-safety)
+    if(CMAKE_CXX_COMPILER_ID MATCHES Clang OR CMAKE_CXX_COMPILER_ID MATCHES AppleClang)
+        target_compile_options(nova_sync PRIVATE -Wthread-safety)
     endif()
 
     add_executable(nova_sync_tests
