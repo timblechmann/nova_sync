@@ -242,11 +242,17 @@ bool kevent_until( int                                                         k
     return result;
 }
 
-bool kevent_until( int kqfd,
-                   uintptr_t /*lock_ident*/,
+bool kevent_until( int                                                         kqfd,
+                   uintptr_t                                                   lock_ident,
                    const std::chrono::time_point< std::chrono::steady_clock >& deadline ) noexcept
 {
-    return kevent_for( kqfd, deadline - std::chrono::steady_clock::now() );
+    while ( true ) {
+        auto remaining = deadline - std::chrono::steady_clock::now();
+        if ( remaining <= 0ns )
+            return false;
+        if ( kevent_for( kqfd, std::chrono::duration_cast< std::chrono::nanoseconds >( remaining ) ) )
+            return true;
+    }
 }
 
 // ============================================================================

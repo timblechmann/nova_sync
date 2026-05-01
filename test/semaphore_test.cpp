@@ -353,3 +353,78 @@ TEMPLATE_TEST_CASE( "counting_semaphore stress", "[stress]", NOVA_SYNC_ALL_SEMAP
         }
     }
 }
+
+TEMPLATE_TEST_CASE( "semaphore: timeout without concurrent release always fails",
+                    "[semaphore]",
+                    NOVA_SYNC_TIMED_SEMAPHORE_TYPES )
+{
+    using sem_t = TestType;
+
+    // Timeout with no release should always fail
+    // Bug would cause phantom tokens to be created
+    sem_t sem( 0 );
+
+    auto deadline = std::chrono::steady_clock::now() + 10ms;
+    bool acquired = sem.try_acquire_until( deadline );
+
+    REQUIRE( acquired == false );
+    // Verify no phantom token was created
+    REQUIRE( sem.try_acquire() == false );
+}
+
+TEMPLATE_TEST_CASE( "semaphore: timeout with prior release always succeeds",
+                    "[semaphore]",
+                    NOVA_SYNC_TIMED_SEMAPHORE_TYPES )
+{
+    using sem_t = TestType;
+
+    // Pre-release before timeout should always succeed
+    sem_t sem( 0 );
+    sem.release( 1 );
+
+    auto deadline = std::chrono::steady_clock::now() + 10ms;
+    bool acquired = sem.try_acquire_until( deadline );
+
+    REQUIRE( acquired == true );
+    // Verify the token was properly consumed
+    REQUIRE( sem.try_acquire() == false );
+}
+
+TEMPLATE_TEST_CASE( "semaphore: multiple timeout races with concurrent release",
+                    "[semaphore]",
+                    NOVA_SYNC_TIMED_SEMAPHORE_TYPES )
+{
+    using sem_t = TestType;
+
+    // Stress test: multiple threads timing out while other thread releases
+    sem_t sem( 0 );
+
+    std::atomic< int >         timeouts { 0 };
+    std::atomic< int >         successes { 0 };
+    std::vector< std::thread > threads;
+
+    // Threads that will timeout
+    for ( int i = 0; i < 5; ++i ) {
+        threads.emplace_back( [ & ] {
+            auto deadline = std::chrono::steady_clock::now() + 20ms;
+            if ( sem.try_acquire_until( deadline ) ) {
+                successes.fetch_add( 1, std::memory_order_relaxed );
+            } else {
+                timeouts.fetch_add( 1, std::memory_order_relaxed );
+            }
+        } );
+    }
+
+    std::this_thread::sleep_for( 5ms );
+
+    // One release during the waiting
+    sem.release( 1 );
+
+    // Join all threads
+    for ( auto& t : threads )
+        t.join();
+
+    // Either one thread got the token, or all timed out
+    REQUIRE( successes.load() + timeouts.load() == 5 );
+    REQUIRE( successes.load() <= 1 ); // At most one can get the token
+}

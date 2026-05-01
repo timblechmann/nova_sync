@@ -60,7 +60,8 @@
 
 // clang-format off
 #define NOVA_SYNC_ALL_SEMAPHORE_TYPES                \
-    nova::sync::fast_semaphore                       \
+    nova::sync::fast_semaphore,                      \
+    nova::sync::fast_timed_semaphore                 \
     NOVA_SYNC_EVENTFD_SEMAPHORE_arg                  \
     NOVA_SYNC_KQUEUE_SEMAPHORE_arg                   \
     NOVA_SYNC_WIN32_SEMAPHORE_arg                    \
@@ -75,7 +76,8 @@
 
 // clang-format off
 #define NOVA_SYNC_TIMED_SEMAPHORE_TYPES              \
-    nova::sync::eventfd_semaphore                    \
+    nova::sync::fast_timed_semaphore                 \
+    NOVA_SYNC_EVENTFD_SEMAPHORE_arg                  \
     NOVA_SYNC_KQUEUE_SEMAPHORE_arg                   \
     NOVA_SYNC_WIN32_SEMAPHORE_arg                    \
     NOVA_SYNC_POSIX_SEMAPHORE_arg                    \
