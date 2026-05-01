@@ -363,6 +363,8 @@ bool atomic_wait_for( std::atomic< int32_t >&  atom,
         return atom.load( std::memory_order_relaxed ) != old;
     } );
 
+    if ( order != std::memory_order_relaxed )
+        std::atomic_thread_fence( std::memory_order_acquire );
     return atom.load( std::memory_order_relaxed ) != old;
 }
 
@@ -387,6 +389,8 @@ bool atomic_wait_until( std::atomic< int32_t >&                                 
         return atom.load( std::memory_order_relaxed ) != old;
     } );
 
+    if ( order != std::memory_order_relaxed )
+        std::atomic_thread_fence( std::memory_order_acquire );
     return atom.load( std::memory_order_relaxed ) != old;
 }
 
@@ -411,6 +415,8 @@ bool atomic_wait_until( std::atomic< int32_t >&                                 
         return atom.load( std::memory_order_relaxed ) != old;
     } );
 
+    if ( order != std::memory_order_relaxed )
+        std::atomic_thread_fence( std::memory_order_acquire );
     return atom.load( std::memory_order_relaxed ) != old;
 }
 
