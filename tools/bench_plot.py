@@ -136,8 +136,8 @@ def plot_group_benchmarks(grouped, out_prefix, testcase_map=None):
         means = [p[1] for p in pairs_sorted]
 
         # Figure sizing: width scales with number of subjects, height fixed
-        width = max(6, 0.6 * max(1, len(subjects)))
-        height = 4
+        width = max(8, 0.6 * max(1, len(subjects)))
+        height = 10
 
         # Default plotting behavior: single axes with linear scale but allow handling
         # of large outliers via symlog or broken axis. Default thresholds can be
@@ -238,6 +238,7 @@ def plot_group_benchmarks(grouped, out_prefix, testcase_map=None):
                 gridspec_kw={"height_ratios": heights},
                 figsize=(max(8, width), max(3, 2 + k * 1.5)),
                 dpi=100,
+                layout='constrained',
             )
 
             # Ensure axes is a list
@@ -313,11 +314,11 @@ def plot_group_benchmarks(grouped, out_prefix, testcase_map=None):
                     val = means[i]
                     ax.text(i, val + headroom, f"{val:.1f}", ha="center", va="bottom", fontsize=8)
 
-            plt.tight_layout()
+            # plt.tight_layout()
 
         else:
             # No very large outliers -> simple linear plot
-            fig, ax = plt.subplots(figsize=(width, height), dpi=100)
+            fig, ax = plt.subplots(figsize=(width, height), dpi=100, layout='constrained')
             bars = ax.bar(x, means, color="tab:blue", width=0.6)
             ax.set_xticks(x)
             ax.set_xticklabels(subjects, rotation=45, ha="right", fontsize=9)
@@ -331,7 +332,7 @@ def plot_group_benchmarks(grouped, out_prefix, testcase_map=None):
                 h = rect.get_height()
                 ax.text(rect.get_x() + rect.get_width() / 2.0, h + (top * 0.02), f"{val:.3f}", ha="center", va="bottom", fontsize=8)
 
-            plt.tight_layout()
+            # plt.tight_layout()
 
         # Output filename: append sanitized testcase name and bench name
         safe_testcase = testcase_name.replace(" ", "_").replace("/", "_")
