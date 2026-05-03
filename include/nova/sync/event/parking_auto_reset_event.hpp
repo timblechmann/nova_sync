@@ -81,12 +81,13 @@ public:
     void wait() noexcept
     {
         if constexpr ( use_backoff ) {
-            detail::exponential_backoff backoff;
-            while ( backoff.backoff < detail::exponential_backoff::spin_limit ) {
+            bool success = detail::run_with_exponential_backoff_until( [ this ]() -> detail::backoff_result {
                 if ( try_wait() )
-                    return;
-                backoff.run();
-            }
+                    return detail::backoff_result::success;
+                return detail::backoff_result::retry;
+            } );
+            if ( success )
+                return;
         }
 
         int32_t prev = state_.fetch_sub( 1, std::memory_order_acquire );

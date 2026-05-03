@@ -29,6 +29,11 @@
 
 #  define NOVA_SYNC_FUTEX_WIN32 1
 
+#elif defined( __APPLE__ )
+#  include <os/os_sync_wait_on_address.h>
+
+#  define NOVA_SYNC_FUTEX_APPLE 1
+
 #else
 // Portable fallback: hash-table of mutex + condvar buckets.
 #  include <array>
@@ -358,6 +363,140 @@ void atomic_notify_one( std::atomic< int32_t >& atom ) noexcept
 void atomic_notify_all( std::atomic< int32_t >& atom ) noexcept
 {
     ::WakeByAddressAll( reinterpret_cast< void* >( std::addressof( atom ) ) );
+}
+
+// =============================================================================
+// Apple — os_sync_wait_on_address
+// =============================================================================
+#elif defined( NOVA_SYNC_FUTEX_APPLE )
+
+namespace {
+
+// Convert system_clock deadline to steady_clock deadline
+std::chrono::time_point< std::chrono::steady_clock >
+system_clock_to_steady( const std::chrono::time_point< std::chrono::system_clock >& deadline ) noexcept
+{
+    auto system_now = std::chrono::system_clock::now();
+    auto steady_now = std::chrono::steady_clock::now();
+    auto offset     = deadline - system_now;
+    return steady_now + offset;
+}
+
+} // namespace
+
+void atomic_wait( std::atomic< int32_t >& atom, int32_t old, std::memory_order order ) noexcept
+{
+    {
+        auto load_order = ( order != std::memory_order_relaxed ) ? std::memory_order_acquire : std::memory_order_relaxed;
+        if ( atom.load( load_order ) != old )
+            return;
+    }
+
+    // Use blocking wait with no timeout
+    ::os_sync_wait_on_address( reinterpret_cast< void* >( &atom ),
+                               uint64_t( old ),
+                               sizeof( int32_t ),
+                               OS_SYNC_WAIT_ON_ADDRESS_NONE );
+
+    if ( order != std::memory_order_relaxed )
+        std::atomic_thread_fence( std::memory_order_acquire );
+}
+
+bool atomic_wait_for( std::atomic< int32_t >&  atom,
+                      int32_t                  old,
+                      std::chrono::nanoseconds rel,
+                      std::memory_order        order ) noexcept
+{
+    if ( rel <= 0ns )
+        return atom.load( std::memory_order_relaxed ) != old;
+
+    {
+        auto load_order = ( order != std::memory_order_relaxed ) ? std::memory_order_acquire : std::memory_order_relaxed;
+        if ( atom.load( load_order ) != old )
+            return true;
+    }
+
+    // Ensure timeout is at least 1ns (API requires non-zero)
+    uint64_t timeout_ns = std::min( uint64_t( rel.count() ), UINT64_MAX );
+
+    int rc = ::os_sync_wait_on_address_with_timeout( reinterpret_cast< void* >( &atom ),
+                                                     uint64_t( old ),
+                                                     sizeof( int32_t ),
+                                                     OS_SYNC_WAIT_ON_ADDRESS_NONE,
+                                                     OS_CLOCK_MACH_ABSOLUTE_TIME,
+                                                     timeout_ns );
+
+    (void)rc; // Ignore return value; just check current value
+
+    if ( order != std::memory_order_relaxed )
+        std::atomic_thread_fence( std::memory_order_acquire );
+
+    return atom.load( std::memory_order_relaxed ) != old;
+}
+
+bool atomic_wait_until( std::atomic< int32_t >&                                     atom,
+                        int32_t                                                     old,
+                        const std::chrono::time_point< std::chrono::steady_clock >& deadline,
+                        std::memory_order                                           order ) noexcept
+{
+    {
+        auto load_order = ( order != std::memory_order_relaxed ) ? std::memory_order_acquire : std::memory_order_relaxed;
+        if ( atom.load( load_order ) != old )
+            return true;
+    }
+
+    while ( true ) {
+        auto remaining = deadline - std::chrono::steady_clock::now();
+        if ( remaining <= 0ns )
+            return atom.load( std::memory_order_relaxed ) != old;
+
+        // Ensure timeout is at least 1ns (API requires non-zero)
+        uint64_t timeout_ns = std::min( uint64_t( remaining.count() ), UINT64_MAX );
+
+        int rc = ::os_sync_wait_on_address_with_timeout( reinterpret_cast< void* >( &atom ),
+                                                         uint64_t( old ),
+                                                         sizeof( int32_t ),
+                                                         OS_SYNC_WAIT_ON_ADDRESS_NONE,
+                                                         OS_CLOCK_MACH_ABSOLUTE_TIME,
+                                                         timeout_ns );
+
+        (void)rc; // Ignore return value; just check current value
+
+        if ( order != std::memory_order_relaxed )
+            std::atomic_thread_fence( std::memory_order_acquire );
+
+        if ( atom.load( std::memory_order_relaxed ) != old )
+            return true;
+
+        if ( std::chrono::steady_clock::now() >= deadline )
+            return false;
+    }
+}
+
+bool atomic_wait_until( std::atomic< int32_t >&                                     atom,
+                        int32_t                                                     old,
+                        const std::chrono::time_point< std::chrono::system_clock >& deadline,
+                        std::memory_order                                           order ) noexcept
+{
+    {
+        auto load_order = ( order != std::memory_order_relaxed ) ? std::memory_order_acquire : std::memory_order_relaxed;
+        if ( atom.load( load_order ) != old )
+            return true;
+    }
+
+    // Convert system_clock deadline to steady_clock and use that path
+    auto steady_deadline = system_clock_to_steady( deadline );
+    return atomic_wait_until( atom, old, steady_deadline, order );
+}
+
+void atomic_notify_one( std::atomic< int32_t >& atom ) noexcept
+{
+    ::os_sync_wake_by_address_any( reinterpret_cast< void* >( &atom ), sizeof( int32_t ), OS_SYNC_WAKE_BY_ADDRESS_NONE );
+}
+
+void atomic_notify_all( std::atomic< int32_t >& atom ) noexcept
+{
+    ::os_sync_wake_by_address_all( reinterpret_cast< void* >( &atom ), sizeof( int32_t ), OS_SYNC_WAKE_BY_ADDRESS_NONE );
 }
 
 // =============================================================================

@@ -94,19 +94,18 @@ void fast_eventfd_mutex_impl::consume_lock() const noexcept
 
 void fast_eventfd_mutex_impl::lock_slow() noexcept
 {
-    detail::exponential_backoff backoff;
-
-    uint32_t s = state_.load( std::memory_order_relaxed );
-    while ( backoff.backoff < detail::exponential_backoff::spin_limit ) {
+    uint32_t s       = state_.load( std::memory_order_relaxed );
+    bool     success = detail::run_with_exponential_backoff_until( [ & ]() -> detail::backoff_result {
         if ( ( s & 1u ) == 0 ) {
             if ( state_.compare_exchange_weak( s, s | 1u, std::memory_order_acquire, std::memory_order_relaxed ) )
-                return;
-            continue;
+                return detail::backoff_result::success;
+            return detail::backoff_result::retry;
         }
+        return detail::backoff_result::failure;
+    } );
 
-        backoff.run();
-        s = state_.load( std::memory_order_relaxed );
-    }
+    if ( success )
+        return;
 
     s = add_async_waiter();
     detail::async_waiter_guard< fast_eventfd_mutex_impl > guard( *this, detail::adopt_async_waiter );

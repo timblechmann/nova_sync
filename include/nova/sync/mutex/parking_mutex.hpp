@@ -47,7 +47,7 @@ public:
     {
         uint32_t prev = state_.fetch_and( ~1u, std::memory_order_release );
         if ( prev > 1 ) {
-#ifdef __linux__
+#if defined( __linux__ ) || defined( __APPLE__ )
             atomic_notify_one( state_ );
 #else
             state_.notify_one();

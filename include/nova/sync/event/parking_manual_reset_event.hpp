@@ -70,12 +70,13 @@ public:
     void wait() noexcept
     {
         if constexpr ( use_backoff ) {
-            detail::exponential_backoff backoff;
-            while ( backoff.backoff < detail::exponential_backoff::spin_limit ) {
+            bool success = detail::run_with_exponential_backoff_until( [ this ]() -> detail::backoff_result {
                 if ( state_.load( std::memory_order_acquire ) != 0u )
-                    return;
-                backoff.run();
-            }
+                    return detail::backoff_result::success;
+                return detail::backoff_result::retry_without_backoff;
+            } );
+            if ( success )
+                return;
         }
 
         if ( state_.load( std::memory_order_acquire ) != 0u )

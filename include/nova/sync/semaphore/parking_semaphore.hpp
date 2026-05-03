@@ -70,15 +70,17 @@ public:
     void acquire() noexcept
     {
         if constexpr ( use_backoff ) {
-            detail::exponential_backoff backoff;
-            while ( backoff.backoff < detail::exponential_backoff::spin_limit ) {
-                auto c = count_.load( std::memory_order_relaxed );
+            auto c       = count_.load( std::memory_order_relaxed );
+            bool success = detail::run_with_exponential_backoff_until( [ & ]() -> detail::backoff_result {
                 if ( c > 0 ) {
                     if ( count_.compare_exchange_weak( c, c - 1, std::memory_order_acquire, std::memory_order_relaxed ) )
-                        return;
+                        return detail::backoff_result::success;
+                    return detail::backoff_result::retry_without_backoff;
                 }
-                backoff.run();
-            }
+                return detail::backoff_result::retry;
+            } );
+            if ( success )
+                return;
         }
 
         auto prev = count_.fetch_sub( 1, std::memory_order_acquire );
@@ -156,15 +158,17 @@ public:
     void acquire() noexcept
     {
         if constexpr ( use_backoff ) {
-            detail::exponential_backoff backoff;
-            while ( backoff.backoff < detail::exponential_backoff::spin_limit ) {
-                auto c = count_.load( std::memory_order_relaxed );
+            auto c       = count_.load( std::memory_order_relaxed );
+            bool success = detail::run_with_exponential_backoff_until( [ & ]() -> detail::backoff_result {
                 if ( c > 0 ) {
                     if ( count_.compare_exchange_weak( c, c - 1, std::memory_order_acquire, std::memory_order_relaxed ) )
-                        return;
+                        return detail::backoff_result::success;
+                    return detail::backoff_result::retry_without_backoff;
                 }
-                backoff.run();
-            }
+                return detail::backoff_result::retry;
+            } );
+            if ( success )
+                return;
         }
 
         auto prev = count_.fetch_sub( 1, std::memory_order_acquire );

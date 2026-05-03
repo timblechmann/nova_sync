@@ -27,7 +27,7 @@ void parking_mutex_plain::lock_slow( uint32_t expected ) noexcept
             if ( state_.compare_exchange_weak( expected, desired, std::memory_order_acquire, std::memory_order_relaxed ) )
                 return;
         } else {
-#ifdef __linux__
+#if defined( __linux__ ) || defined( __APPLE__ )
             // On Linux, use atomic_wait (futex-based) for better performance
             atomic_wait( state_, expected, std::memory_order_relaxed );
 #else
@@ -45,20 +45,18 @@ void parking_mutex_plain::lock_slow( uint32_t expected ) noexcept
 NOVA_SYNC_NOINLINE
 void parking_mutex_backoff::lock_slow( uint32_t expected ) noexcept
 {
-    detail::exponential_backoff backoff;
-
-    while ( backoff.backoff < detail::exponential_backoff::spin_limit ) {
+    bool success = detail::run_with_exponential_backoff_until( [ & ]() -> detail::backoff_result {
         if ( ( expected & 1 ) == 0 ) {
             if ( state_.compare_exchange_weak(
                      expected, expected | 1, std::memory_order_acquire, std::memory_order_relaxed ) )
-                return;
+                return detail::backoff_result::success;
             // CAS failed — expected was updated; re-evaluate immediately without backing off
-            continue;
+            return detail::backoff_result::retry_without_backoff;
         }
-
-        backoff.run();
-        expected = state_.load( std::memory_order_relaxed );
-    }
+        return detail::backoff_result::retry;
+    } );
+    if ( success )
+        return;
 
     // Spinning exhausted — register as waiter and park
     state_.fetch_add( 2, std::memory_order_relaxed );
@@ -70,7 +68,7 @@ void parking_mutex_backoff::lock_slow( uint32_t expected ) noexcept
             if ( state_.compare_exchange_weak( expected, desired, std::memory_order_acquire, std::memory_order_relaxed ) )
                 return;
         } else {
-#ifdef __linux__
+#if defined( __linux__ ) || defined( __APPLE__ )
             // On Linux, use atomic_wait (futex-based) for better performance
             atomic_wait( state_, expected, std::memory_order_relaxed );
 #else
@@ -109,20 +107,18 @@ void parking_mutex_timed::lock_slow( uint32_t expected ) noexcept
 NOVA_SYNC_NOINLINE
 void parking_mutex_timed_backoff::lock_slow( uint32_t expected ) noexcept
 {
-    detail::exponential_backoff backoff;
-
-    while ( backoff.backoff < detail::exponential_backoff::spin_limit ) {
+    bool success = detail::run_with_exponential_backoff_until( [ & ]() -> detail::backoff_result {
         if ( ( expected & 1 ) == 0 ) {
             if ( state_.compare_exchange_weak(
                      expected, expected | 1, std::memory_order_acquire, std::memory_order_relaxed ) )
-                return;
+                return detail::backoff_result::success;
             // CAS failed — expected was updated; re-evaluate immediately without backing off
-            continue;
+            return detail::backoff_result::retry_without_backoff;
         }
-
-        backoff.run();
-        expected = state_.load( std::memory_order_relaxed );
-    }
+        return detail::backoff_result::retry;
+    } );
+    if ( success )
+        return;
 
     // Spinning exhausted — register as waiter and park
     state_.fetch_add( 2, std::memory_order_relaxed );
