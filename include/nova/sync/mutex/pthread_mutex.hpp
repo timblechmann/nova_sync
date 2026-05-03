@@ -6,7 +6,7 @@
 #if __has_include( <pthread.h> ) && __has_include( <unistd.h> )
 #  include <pthread.h>
 #  include <unistd.h>
-#  if defined( _POSIX_THREADS ) && _POSIX_THREADS >= 0
+#  if defined( _POSIX_THREADS ) && _POSIX_THREADS >= 0 && defined( _POSIX_TIMEOUTS ) && ( _POSIX_TIMEOUTS >= 0 )
 #    define NOVA_SYNC_HAS_PTHREAD_MUTEX 1
 #  endif
 #  if defined( _POSIX_THREAD_PRIO_PROTECT ) && _POSIX_THREAD_PRIO_PROTECT >= 0
@@ -169,13 +169,27 @@ public:
                 .tv_nsec = long( nsecs.count() ),
             };
 
+#  if defined( __linux__ )
+            return pthread_mutex_clocklock( &mutex_, CLOCK_REALTIME, &ts ) == 0;
+#  else
             return pthread_mutex_timedlock( &mutex_, &ts ) == 0;
+#  endif
+#  if defined( __linux__ )
+        } else if constexpr ( std::is_same_v< Clock, std::chrono::steady_clock > ) {
+            auto ns    = std::chrono::time_point_cast< std::chrono::nanoseconds >( abs_time ).time_since_epoch();
+            auto secs  = std::chrono::duration_cast< std::chrono::seconds >( ns );
+            auto nsecs = ns - secs;
+
+            struct timespec ts {
+                .tv_sec  = time_t( secs.count() ),
+                .tv_nsec = long( nsecs.count() ),
+            };
+
+            return pthread_mutex_clocklock( &mutex_, CLOCK_MONOTONIC, &ts ) == 0;
+#  endif
         } else {
-            auto remaining = abs_time - Clock::now();
-            if ( remaining <= std::chrono::nanoseconds::zero() )
-                return try_lock();
-            auto sys_deadline = std::chrono::system_clock::now() + remaining;
-            return try_lock_until( sys_deadline );
+            auto rel_time = abs_time - Clock::now();
+            return try_lock_for( rel_time );
         }
     }
 
