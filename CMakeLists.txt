@@ -115,6 +115,7 @@ set(headers
     include/nova/sync/thread_safety/locked_object.hpp
     include/nova/sync/mutex/native_async_mutex.hpp
     include/nova/sync/mutex/pthread_mutex.hpp
+    include/nova/sync/mutex/pthread_rwlock_mutex.hpp
     include/nova/sync/mutex/pthread_spinlock_mutex.hpp
 
 

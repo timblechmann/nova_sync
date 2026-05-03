@@ -5,6 +5,7 @@
 #include <nova/sync/mutex/kqueue_mutex.hpp>
 #include <nova/sync/mutex/parking_mutex.hpp>
 #include <nova/sync/mutex/pthread_mutex.hpp>
+#include <nova/sync/mutex/pthread_rwlock_mutex.hpp>
 #include <nova/sync/mutex/pthread_spinlock_mutex.hpp>
 #include <nova/sync/mutex/spinlock_mutex.hpp>
 #include <nova/sync/mutex/ticket_mutex.hpp>
@@ -14,9 +15,15 @@
 #include <nova/sync/mutex/win32_srw_mutex.hpp>
 
 #ifdef NOVA_SYNC_HAS_PTHREAD_SPINLOCK
-#  define NOVA_SYNC_HAS_PTHREAD_SPINLOCK_arg , nova::sync::pthread_spinlock_mutex
+#  define NOVA_SYNC_PTHREAD_SPINLOCK_arg , nova::sync::pthread_spinlock_mutex
 #else
-#  define NOVA_SYNC_HAS_PTHREAD_SPINLOCK_arg
+#  define NOVA_SYNC_PTHREAD_SPINLOCK_arg
+#endif
+
+#ifdef NOVA_SYNC_HAS_PTHREAD_RWLOCK_
+#  define NOVA_SYNC_PTHREAD_RWLOCK_arg , nova::sync::pthread_rwlock_mutex
+#else
+#  define NOVA_SYNC_PTHREAD_RWLOCK_arg
 #endif
 
 #ifdef NOVA_SYNC_HAS_PTHREAD_MUTEX
@@ -30,9 +37,9 @@
 #endif
 
 #ifdef NOVA_SYNC_HAS_PTHREAD_RT_MUTEX
-#  define NOVA_SYNC_HAS_PTHREAD_RT_MUTEX_arg , nova::sync::pthread_priority_inherit_mutex
+#  define NOVA_SYNC_PTHREAD_RT_MUTEX_arg , nova::sync::pthread_priority_inherit_mutex
 #else
-#  define NOVA_SYNC_HAS_PTHREAD_RT_MUTEX_arg
+#  define NOVA_SYNC_PTHREAD_RT_MUTEX_arg
 #endif
 
 #ifdef _WIN32
@@ -52,6 +59,12 @@
 #  define NOVA_SYNC_APPLE_OS_UNFAIR_MUTEX_arg , nova::sync::apple_os_unfair_mutex
 #else
 #  define NOVA_SYNC_APPLE_OS_UNFAIR_MUTEX_arg
+#endif
+
+#ifdef NOVA_SYNC_HAS_PTHREAD_RWLOCK
+#  define NOVA_SYNC_PTHREAD_RWLOCK_MUTEX_arg , nova::sync::pthread_rwlock_mutex
+#else
+#  define NOVA_SYNC_PTHREAD_RWLOCK_MUTEX_arg
 #endif
 
 #ifdef NOVA_SYNC_HAS_KQUEUE_MUTEX
@@ -75,10 +88,12 @@
 // clang-format off
 
 #define NOVA_SYNC_MUTEX_TEST_EXTRA_TYPES       \
-    NOVA_SYNC_HAS_PTHREAD_SPINLOCK_arg         \
+    NOVA_SYNC_PTHREAD_SPINLOCK_arg         \
     NOVA_SYNC_PTHREAD_RECURSIVE_MUTEX_arg      \
+    NOVA_SYNC_PTHREAD_RWLOCK_MUTEX_arg         \
     NOVA_SYNC_PTHREAD_NONRECURSIVE_MUTEX_arg   \
-    NOVA_SYNC_HAS_PTHREAD_RT_MUTEX_arg         \
+    NOVA_SYNC_PTHREAD_RWLOCK_arg               \
+    NOVA_SYNC_PTHREAD_RT_MUTEX_arg         \
     NOVA_SYNC_WIN32_CRITICAL_SECTION_MUTEX_arg \
     NOVA_SYNC_WIN32_MUTEX_arg                  \
     NOVA_SYNC_WIN32_EVENT_MUTEX_arg            \
@@ -143,7 +158,8 @@ using spinlock_mutex_shared_with_backoff    = nova::sync::spinlock_mutex< nova::
 
 #define NOVA_SYNC_SHARED_MUTEX_TYPES                 \
     spinlock_mutex_shared,                           \
-    spinlock_mutex_shared_with_backoff
+    spinlock_mutex_shared_with_backoff               \
+    NOVA_SYNC_PTHREAD_RWLOCK_arg
 
 #define NOVA_SYNC_ASYNC_MUTEX_TEST_TYPES \
     NOVA_SYNC_WIN32_EVENT_MUTEX_arg      \
