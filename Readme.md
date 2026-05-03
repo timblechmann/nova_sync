@@ -6,38 +6,79 @@ Synchronization primitives for C++20: specialized mutex and event types optimize
 
 | Type | Characteristics | Named Requirement |
 |------|-----------------|-------------------|
-| `spinlock_mutex` | Simple spinlock | `Mutex` |
-| `recursive_spinlock_mutex` | Recursive spinlock  | `Mutex` |
-| `pthread_spinlock_mutex` | `pthread_spinlock_t` based spinlock  | `Mutex` |
-| `shared_spinlock_mutex` | Shared spinlock | `SharedMutex` |
-| `fast_mutex` | Fast general purpose mutex | `Mutex` |
-| `fair_mutex` | Ticket lock, FIFO fairness guaranteed | `Mutex` |
-| `pthread_priority_ceiling_mutex` | POSIX real-time mutex (PTHREAD_PRIO_PROTECT), Linux/POSIX only | `TimedMutex` |
-| `pthread_priority_inherit_mutex` | POSIX real-time mutex (PTHREAD_PRIO_INHERIT), Linux/POSIX only | `TimedMutex` |
-| `win32_recursive_mutex` | Win32 CRITICAL_SECTION, Windows only | `Mutex` |
+| `parking_mutex<>` | Futex-based mutex, parks immediately | `Mutex` |
+| `parking_mutex<with_backoff>` | Futex-based mutex, exponential backoff before parking | `Mutex` |
+| `parking_mutex<timed>` | Futex-based mutex, no spin, timed waits | `TimedMutex` |
+| `parking_mutex<timed, with_backoff>` | Futex-based mutex, exponential backoff, timed waits | `TimedMutex` |
+| `ticket_mutex<>` | Fair FIFO ticket lock, futex sleep | `TimedMutex` |
+| `ticket_mutex<with_backoff>` | Fair FIFO ticket lock with exponential backoff | `TimedMutex` |
+| `spinlock_mutex<>` | Spinlock, CPU-pause hints | `Mutex` |
+| `spinlock_mutex<with_backoff>` | Spinlock, exponential backoff | `Mutex` |
+| `spinlock_mutex<recursive>` | Recursive spinlock | `Mutex` |
+| `spinlock_mutex<recursive, with_backoff>` | Recursive spinlock with backoff | `Mutex` |
+| `spinlock_mutex<shared>` | Shared (reader-writer) spinlock | `SharedMutex` |
+| `spinlock_mutex<shared, with_backoff>` | Shared spinlock with exponential backoff | `SharedMutex` |
+| `pthread_spinlock_mutex` | `pthread_spinlock_t` based spinlock, POSIX only | `Mutex` |
+| `pthread_mutex<>` | POSIX `pthread_mutex_t` (default type) | `TimedMutex` |
+| `pthread_mutex<pthread_recursive>` | Recursive POSIX mutex | `TimedMutex` |
+| `pthread_mutex<pthread_errorcheck>` | Error-checking POSIX mutex | `TimedMutex` |
+| `pthread_mutex<pthread_adaptive>` | Adaptive-spin POSIX mutex (Linux) | `TimedMutex` |
+| `pthread_mutex<priority_inherit>` | POSIX mutex, priority inheritance (RT) | `TimedMutex` |
+| `pthread_mutex<priority_ceiling<N>>` | POSIX mutex, priority ceiling N (RT) | `TimedMutex` |
+| `win32_critical_section_mutex<>` | Win32 CRITICAL_SECTION, recursive, Windows only | `Mutex` |
+| `win32_critical_section_mutex<win32_spin_count<N>>` | Win32 CRITICAL_SECTION with custom spin count | `Mutex` |
 | `win32_mutex` | Win32 kernel mutex, async-capable, Windows only | `TimedMutex` |
 | `win32_srw_mutex` | Win32 SRW lock (ultra-lightweight), Windows only | `Mutex` |
 | `apple_os_unfair_mutex` | Apple `os_unfair_lock`, macOS/iOS only | `Mutex` |
-| `kqueue_mutex` | Apple kqueue-based async mutex, macOS/iOS only | `Mutex` |
-| `eventfd_mutex` | Linux eventfd-based async mutex | `Mutex` |
-| `native_async_mutex` | Cross-platform alias: `win32_mutex` / `kqueue_mutex` / `eventfd_mutex` | `Mutex` |
+| `kqueue_mutex<>` | Apple kqueue-based async mutex | `TimedMutex` |
+| `kqueue_mutex<with_backoff>` | kqueue mutex with exponential backoff | `TimedMutex` |
+| `eventfd_mutex<>` | Linux eventfd-based async mutex | `TimedMutex` |
+| `eventfd_mutex<with_backoff>` | eventfd mutex with exponential backoff | `TimedMutex` |
+| `native_async_mutex` | Cross-platform alias: `win32_event_mutex` / `kqueue_mutex<with_backoff>` / `eventfd_mutex<with_backoff>` | `TimedMutex` |
 
-### `fast_mutex`
+### Policy parameters
 
-Lock-free fast path using `std::atomic::wait()`. Superior performance to `std::mutex` under low-to-moderate contention.
+All policy types live in `nova/sync/mutex/policies.hpp`:
 
-### `fair_mutex`
+| Policy | Effect |
+|--------|--------|
+| `with_backoff` | Exponential backoff with CPU pause hints before blocking |
+| `recursive` | Allow re-entrant locking from the owning thread (`spinlock_mutex` only) |
+| `shared` | Enable shared (reader-writer) locking via `lock_shared()` (`spinlock_mutex` only; mutually exclusive with `recursive`) |
+| `priority_inherit` | PTHREAD_PRIO_INHERIT — owner boosted to highest waiter priority |
+| `priority_ceiling<N>` | PTHREAD_PRIO_PROTECT — all holders elevated to ceiling N |
+| `pthread_recursive` | PTHREAD_MUTEX_RECURSIVE — re-entrant locking |
+| `pthread_errorcheck` | PTHREAD_MUTEX_ERRORCHECK — error on double-lock |
+| `pthread_adaptive` | PTHREAD_MUTEX_ADAPTIVE_NP — adaptive spin (Linux only) |
+| `win32_spin_count<N>` | Spin count for `InitializeCriticalSectionAndSpinCount` |
 
-Ticket lock guaranteeing FIFO lock acquisition order. Prevents starvation under high contention.
+### Convenience aliases
 
-### POSIX real-time mutexes
+```cpp
+using pthread_default_mutex          = pthread_mutex<>;
+using pthread_recursive_mutex        = pthread_mutex< pthread_recursive >;
+using pthread_priority_inherit_mutex = pthread_mutex< priority_inherit >;
+template < int N >
+using pthread_priority_ceiling_mutex = pthread_mutex< priority_ceiling< N > >;
+```
 
-Priority ceiling and inheritance protocols prevent priority inversion. Significantly higher locking overhead; suitable only for real-time systems requiring deterministic scheduling.
+### `parking_mutex`
+
+Futex-based mutex using `std::atomic::wait()`. Fast path acquires in one CAS; slow path parks the calling thread. With `with_backoff`, spins briefly before parking — lower latency under brief contention. Add `timed` to enable `try_lock_for` / `try_lock_until`.
+
+### `ticket_mutex`
+
+FIFO ticket lock guaranteeing strict acquisition order. Prevents starvation under sustained contention. Not suitable for high-throughput low-contention workloads.
+
+### POSIX mutexes
+
+`pthread_mutex<>` wraps `pthread_mutex_t`. Priority-protocol variants (`priority_inherit`, `priority_ceiling<N>`) prevent priority inversion in real-time systems — higher overhead; requires RT scheduling for ceiling variant.
 
 ### Platform-specific async mutexes
 
-`win32_mutex`, `kqueue_mutex`, and `eventfd_mutex` (cross-platform alias: `native_async_mutex`)
+`win32_event_mutex`, `kqueue_mutex`, `eventfd_mutex` (and their `<with_backoff>` policy variants)
 expose native OS handles enabling integration with event loops (Boost.Asio, libdispatch, epoll, Qt, etc.).
+The `native_async_mutex` alias resolves to the fastest variant (`with_backoff`) for the current platform.
 
 Handlers receive an `expected<std::unique_lock<Mutex>, std::error_code>` (`std::expected` or `tl::expected`):
 

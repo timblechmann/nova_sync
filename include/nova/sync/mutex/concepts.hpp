@@ -72,7 +72,6 @@ inline constexpr bool concepts_is_recursive_v = concepts_is_recursive< T >::valu
 // recursive_mutex concept evaluates the trait
 template < typename M >
 concept recursive_mutex = mutex< M > && concepts_is_recursive_v< M >;
-
 template <>
 struct concepts_is_recursive< std::recursive_mutex > : std::true_type
 {};

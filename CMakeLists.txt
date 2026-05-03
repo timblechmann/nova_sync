@@ -2,6 +2,30 @@ cmake_minimum_required(VERSION 3.25)
 
 project(nova_sync VERSION 0.1.0 LANGUAGES CXX C)
 
+
+########################################################################################################################
+
+function(nova_sync_install_pmr)
+    if (NOT COMMAND CPMAddPackage)
+        set(CPM_DOWNLOAD_VERSION 0.42.1)
+        if(NOT EXISTS "${CMAKE_BINARY_DIR}/cmake/CPM.cmake")
+            message(STATUS "Downloading CPM.cmake ${CPM_DOWNLOAD_VERSION}...")
+            file(DOWNLOAD
+                "https://github.com/cpm-cmake/CPM.cmake/releases/download/v${CPM_DOWNLOAD_VERSION}/CPM.cmake"
+                "${CMAKE_BINARY_DIR}/cmake/CPM.cmake"
+                STATUS _cpm_download_status
+                TLS_VERIFY ON
+            )
+            list(GET _cpm_download_status 0 _cpm_download_error)
+            if(_cpm_download_error)
+                list(GET _cpm_download_status 1 _cpm_download_message)
+                message(FATAL_ERROR "Failed to download CPM.cmake: ${_cpm_download_message}")
+            endif()
+        endif()
+        include("${CMAKE_BINARY_DIR}/cmake/CPM.cmake")
+    endif()
+endfunction()
+
 if (NOT CMAKE_CXX_STANDARD)
     set(CMAKE_CXX_STANDARD 20)
 endif()
@@ -10,6 +34,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if (PROJECT_IS_TOP_LEVEL AND NOT CMAKE_MSVC_DEBUG_INFORMATION_FORMAT)
     set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "Embedded")
 endif()
+
+########################################################################################################################
 
 if (PROJECT_IS_TOP_LEVEL)
     add_custom_target(nova_sync_project_files SOURCES
@@ -24,6 +50,20 @@ if (PROJECT_IS_TOP_LEVEL)
     )
 endif()
 
+########################################################################################################################
+
+if (NOT TARGET nova::parameter)
+    nova_sync_install_pmr()
+
+    CPMAddPackage(
+        NAME nova_parameter
+        GITHUB_REPOSITORY timblechmann/nova_parameter
+        GIT_TAG 2a27452a75aec950baf6967e88b28dfe09ab1bf9
+    )
+endif()
+
+########################################################################################################################
+
 set(headers
     include/nova/sync/detail/async_support.hpp
     include/nova/sync/detail/backoff.hpp
@@ -33,12 +73,14 @@ set(headers
     include/nova/sync/detail/syscall.hpp
     include/nova/sync/detail/timed_wait.hpp
     include/nova/sync/futex/atomic_wait.hpp
-    include/nova/sync/event/auto_reset_event.hpp
+    include/nova/sync/event/parking_auto_reset_event.hpp
     include/nova/sync/event/concepts.hpp
     include/nova/sync/event/detail/async_support.hpp
-    include/nova/sync/event/manual_reset_event.hpp
+    include/nova/sync/event/parking_manual_reset_event.hpp
     include/nova/sync/event/native_auto_reset_event.hpp
     include/nova/sync/event/native_manual_reset_event.hpp
+    include/nova/sync/event/parking_auto_reset_event.hpp
+    include/nova/sync/event/parking_manual_reset_event.hpp
     include/nova/sync/event/support/boost_asio_support.hpp
     include/nova/sync/event/support/libdispatch_support.hpp
     include/nova/sync/event/support/qt_support.hpp
@@ -48,10 +90,11 @@ set(headers
     include/nova/sync/semaphore/detail/async_support.hpp
     include/nova/sync/semaphore/dispatch_semaphore.hpp
     include/nova/sync/semaphore/eventfd_semaphore.hpp
-    include/nova/sync/semaphore/fast_semaphore.hpp
+    include/nova/sync/semaphore/parking_semaphore.hpp
     include/nova/sync/semaphore/kqueue_semaphore.hpp
     include/nova/sync/semaphore/mach_semaphore.hpp
     include/nova/sync/semaphore/native_async_semaphore.hpp
+    include/nova/sync/semaphore/parking_semaphore.hpp
     include/nova/sync/semaphore/posix_semaphore.hpp
     include/nova/sync/semaphore/support/boost_asio_support.hpp
     include/nova/sync/semaphore/support/libdispatch_support.hpp
@@ -63,15 +106,19 @@ set(headers
     include/nova/sync/mutex/concepts.hpp
     include/nova/sync/mutex/detail/async_support.hpp
     include/nova/sync/mutex/eventfd_mutex.hpp
-    include/nova/sync/mutex/fair_mutex.hpp
-    include/nova/sync/mutex/fast_mutex.hpp
+    include/nova/sync/mutex/ticket_mutex.hpp
+    include/nova/sync/mutex/parking_mutex.hpp
     include/nova/sync/mutex/kqueue_mutex.hpp
+    include/nova/sync/mutex/parking_mutex.hpp
+    include/nova/sync/mutex/policies.hpp
+    include/nova/sync/mutex/ticket_mutex.hpp
     include/nova/sync/thread_safety/locked_object.hpp
     include/nova/sync/mutex/native_async_mutex.hpp
-    include/nova/sync/mutex/pthread_rt_mutex.hpp
+    include/nova/sync/mutex/pthread_mutex.hpp
+    include/nova/sync/mutex/pthread_rwlock_mutex.hpp
     include/nova/sync/mutex/pthread_spinlock_mutex.hpp
-    include/nova/sync/mutex/recursive_spinlock_mutex.hpp
-    include/nova/sync/mutex/shared_spinlock_mutex.hpp
+
+
     include/nova/sync/mutex/spinlock_mutex.hpp
     include/nova/sync/mutex/support/async_waiter_guard.hpp
     include/nova/sync/mutex/support/boost_asio_support.hpp
@@ -98,14 +145,11 @@ set(sources
     source/nova/sync/semaphore/mach_semaphore.cpp
     source/nova/sync/semaphore/posix_semaphore.cpp
     source/nova/sync/semaphore/win32_semaphore.cpp
-    source/nova/sync/mutex/eventfd_mutex.cpp
-    source/nova/sync/mutex/fair_mutex.cpp
-    source/nova/sync/mutex/fast_mutex.cpp
-    source/nova/sync/mutex/kqueue_mutex.cpp
-    source/nova/sync/mutex/recursive_spinlock_mutex.cpp
-    source/nova/sync/mutex/shared_spinlock_mutex.cpp
+    source/nova/sync/mutex/parking_mutex.cpp
     source/nova/sync/mutex/spinlock_mutex.cpp
-    source/nova/sync/mutex/win32_critical_section_mutex.cpp
+    source/nova/sync/mutex/ticket_mutex.cpp
+    source/nova/sync/mutex/eventfd_mutex.cpp
+    source/nova/sync/mutex/kqueue_mutex.cpp
     source/nova/sync/mutex/win32_event_mutex.cpp
     source/nova/sync/mutex/win32_mutex.cpp
     source/nova/sync/mutex/win32_srw_mutex.cpp
@@ -127,6 +171,7 @@ target_include_directories(nova_sync PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
+target_link_libraries(nova_sync PUBLIC nova::parameter)
 
 if(WIN32)
     target_compile_definitions(nova_sync PRIVATE
@@ -153,26 +198,6 @@ cmake_dependent_option(
 )
 
 if(NOVA_SYNC_TESTS)
-    function(nova_sync_install_pmr)
-        if (NOT COMMAND CPMAddPackage)
-            set(CPM_DOWNLOAD_VERSION 0.42.1)
-            if(NOT EXISTS "${CMAKE_BINARY_DIR}/cmake/CPM.cmake")
-                message(STATUS "Downloading CPM.cmake ${CPM_DOWNLOAD_VERSION}...")
-                file(DOWNLOAD
-                    "https://github.com/cpm-cmake/CPM.cmake/releases/download/v${CPM_DOWNLOAD_VERSION}/CPM.cmake"
-                    "${CMAKE_BINARY_DIR}/cmake/CPM.cmake"
-                    STATUS _cpm_download_status
-                    TLS_VERIFY ON
-                )
-                list(GET _cpm_download_status 0 _cpm_download_error)
-                if(_cpm_download_error)
-                    list(GET _cpm_download_status 1 _cpm_download_message)
-                    message(FATAL_ERROR "Failed to download CPM.cmake: ${_cpm_download_message}")
-                endif()
-            endif()
-            include("${CMAKE_BINARY_DIR}/cmake/CPM.cmake")
-        endif()
-    endfunction()
 
     set(CMAKE_FOLDER "tests")
 
@@ -251,6 +276,7 @@ if(NOVA_SYNC_TESTS)
         test/semaphore_test.cpp
         test/semaphore_benchmarks.cpp
         test/semaphore_async_asio_test.cpp
+        test/policy_mutex_test.cpp
     )
 
     if(WIN32)

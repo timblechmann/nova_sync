@@ -17,17 +17,17 @@
 #  include <cassert>
 #  include <cerrno>
 
-namespace nova::sync {
+namespace nova::sync::detail {
 
 using namespace std::chrono_literals;
 
 static constexpr uintptr_t kqueue_ident = 1;
 
 // ---------------------------------------------------------------------------
-// kqueue_mutex — simple kevent-based variant, no user-space waiter count
+// kqueue_mutex_impl — simple kevent-based variant, no user-space waiter count
 // ---------------------------------------------------------------------------
 
-kqueue_mutex::kqueue_mutex() :
+kqueue_mutex_impl::kqueue_mutex_impl() :
     kqfd_ {
         ::kqueue(),
     }
@@ -40,26 +40,26 @@ kqueue_mutex::kqueue_mutex() :
     assert( r == 0 && "kevent EV_ADD EVFILT_USER failed" );
 }
 
-kqueue_mutex::~kqueue_mutex()
+kqueue_mutex_impl::~kqueue_mutex_impl()
 {
     if ( kqfd_ >= 0 )
         ::close( kqfd_ );
 }
 
-void kqueue_mutex::lock() noexcept
+void kqueue_mutex_impl::lock() noexcept
 {
     struct kevent out {};
     ::kevent( kqfd_, nullptr, 0, &out, 1, nullptr );
 }
 
-bool kqueue_mutex::try_lock() noexcept
+bool kqueue_mutex_impl::try_lock() noexcept
 {
     struct kevent   out {};
     struct timespec ts { 0, 0 };
     return ::kevent( kqfd_, nullptr, 0, &out, 1, &ts ) > 0;
 }
 
-void kqueue_mutex::unlock() noexcept
+void kqueue_mutex_impl::unlock() noexcept
 {
     struct kevent kev {};
     EV_SET( &kev, kqueue_ident, EVFILT_USER, 0, NOTE_TRIGGER, 0, nullptr );
@@ -67,12 +67,12 @@ void kqueue_mutex::unlock() noexcept
 }
 
 // ---------------------------------------------------------------------------
-// fast_kqueue_mutex — fast-path variant with user-space waiter count
+// fast_kqueue_mutex_impl — fast-path variant with user-space waiter count
 // ---------------------------------------------------------------------------
 
 static constexpr uintptr_t fast_kqueue_ident = 2;
 
-fast_kqueue_mutex::fast_kqueue_mutex() :
+fast_kqueue_mutex_impl::fast_kqueue_mutex_impl() :
     kqfd_ {
         ::kqueue(),
     }
@@ -85,17 +85,14 @@ fast_kqueue_mutex::fast_kqueue_mutex() :
     assert( r == 0 && "kevent EV_ADD EVFILT_USER failed" );
 }
 
-fast_kqueue_mutex::~fast_kqueue_mutex()
+fast_kqueue_mutex_impl::~fast_kqueue_mutex_impl()
 {
     if ( kqfd_ >= 0 )
         ::close( kqfd_ );
 }
 
-void fast_kqueue_mutex::unlock() noexcept
+void fast_kqueue_mutex_impl::unlock() noexcept
 {
-    // Clear the lock bit and check if any waiters were registered.
-    // If prev > 1 (waiter count > 0), post NOTE_TRIGGER to wake one waiter.
-    // If prev == 1 (no waiters), skip the kernel call — fast-path optimization.
     uint32_t prev = state_.fetch_and( ~1u, std::memory_order_release );
 
     if ( prev > 1 ) {
@@ -105,14 +102,14 @@ void fast_kqueue_mutex::unlock() noexcept
     }
 }
 
-void fast_kqueue_mutex::consume_lock() const noexcept
+void fast_kqueue_mutex_impl::consume_lock() const noexcept
 {
     struct kevent   out {};
     struct timespec ts { 0, 0 };
     ::kevent( kqfd_, nullptr, 0, &out, 1, &ts );
 }
 
-void fast_kqueue_mutex::lock_slow() noexcept
+void fast_kqueue_mutex_impl::lock_slow() noexcept
 {
     detail::exponential_backoff backoff;
 
@@ -129,7 +126,7 @@ void fast_kqueue_mutex::lock_slow() noexcept
     }
 
     s = add_async_waiter();
-    detail::async_waiter_guard< fast_kqueue_mutex > guard( *this, detail::adopt_async_waiter );
+    detail::async_waiter_guard< fast_kqueue_mutex_impl > guard( *this, detail::adopt_async_waiter );
 
     while ( true ) {
         if ( ( s & 1u ) == 0 ) {
@@ -148,7 +145,7 @@ void fast_kqueue_mutex::lock_slow() noexcept
     }
 }
 
-bool fast_kqueue_mutex::try_lock_for_impl( std::chrono::nanoseconds rel ) noexcept
+bool fast_kqueue_mutex_impl::try_lock_for_impl( std::chrono::nanoseconds rel ) noexcept
 {
     if ( rel <= 0ns )
         return try_lock();
@@ -157,8 +154,8 @@ bool fast_kqueue_mutex::try_lock_for_impl( std::chrono::nanoseconds rel ) noexce
     if ( state_.compare_exchange_weak( expected, 1u, std::memory_order_acquire, std::memory_order_relaxed ) )
         return true;
 
-    auto                                            s = add_async_waiter();
-    detail::async_waiter_guard< fast_kqueue_mutex > guard( *this, detail::adopt_async_waiter );
+    auto                                                 s = add_async_waiter();
+    detail::async_waiter_guard< fast_kqueue_mutex_impl > guard( *this, detail::adopt_async_waiter );
 
     while ( true ) {
         if ( ( s & 1u ) == 0 ) {
@@ -172,15 +169,13 @@ bool fast_kqueue_mutex::try_lock_for_impl( std::chrono::nanoseconds rel ) noexce
         }
 
         if ( !detail::kevent_for( kqfd_, rel ) )
-            // Timed out — guard destructor calls remove_async_waiter().
             return false;
-
 
         consume_lock();
         s = state_.load( std::memory_order_acquire );
     }
 }
 
-} // namespace nova::sync
+} // namespace nova::sync::detail
 
 #endif // NOVA_SYNC_HAS_KQUEUE_MUTEX
