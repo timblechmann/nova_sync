@@ -166,17 +166,17 @@ public:
         if constexpr ( std::is_same_v< Clock, std::chrono::system_clock >
                        || std::is_same_v< Clock, std::chrono::steady_clock > ) {
             // Brief spin phase (same as try_lock_for_ns)
-            detail::exponential_backoff backoff;
-            uint32_t                    s = state_.load( std::memory_order_relaxed );
-            while ( backoff.backoff < detail::exponential_backoff::spin_limit ) {
+            uint32_t s       = state_.load( std::memory_order_relaxed );
+            bool     success = detail::run_with_exponential_backoff_until( [ & ]() -> detail::backoff_result {
                 if ( ( s & 1u ) == 0 ) {
                     if ( state_.compare_exchange_weak( s, s | 1u, std::memory_order_acquire, std::memory_order_relaxed ) )
-                        return true;
-                    continue;
+                        return detail::backoff_result::success;
+                    return detail::backoff_result::retry;
                 }
-                backoff.run();
-                s = state_.load( std::memory_order_relaxed );
-            }
+                return detail::backoff_result::failure;
+            } );
+            if ( success )
+                return true;
 
             // Register as waiter before calling ppoll_until
             s = add_async_waiter(); // returns state after +2
