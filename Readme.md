@@ -231,11 +231,11 @@ Multi-threaded benchmark:
 
 Single-threaded benchmark:
 
-![macOS single-threaded](benchmarks/macos_m4_single-threaded.svg)
+![macOS single-threaded](benchmarks/macos_m4_mutex_benchmarks_single-threaded.svg)
 
 Multi-threaded benchmark:
 
-![macOS multi-threaded](benchmarks/macos_m4_multi-threaded.svg)
+![macOS multi-threaded](benchmarks/macos_m4_mutex_benchmarks_multi-threaded.svg)
 
 #### Windows 11 — Intel i7-14700K
 
