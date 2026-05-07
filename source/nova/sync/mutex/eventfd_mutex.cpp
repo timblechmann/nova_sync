@@ -99,9 +99,9 @@ void fast_eventfd_mutex_impl::lock_slow() noexcept
         if ( ( s & 1u ) == 0 ) {
             if ( state_.compare_exchange_weak( s, s | 1u, std::memory_order_acquire, std::memory_order_relaxed ) )
                 return detail::backoff_result::success;
-            return detail::backoff_result::retry;
+            return detail::backoff_result::retry_without_backoff;
         }
-        return detail::backoff_result::failure;
+        return detail::backoff_result::retry;
     } );
 
     if ( success )

@@ -118,10 +118,10 @@ using spinlock_mutex_shared                 = nova::sync::spinlock_mutex< nova::
 using spinlock_mutex_shared_with_backoff    = nova::sync::spinlock_mutex< nova::sync::shared, nova::sync::with_backoff >;
 
 #define NOVA_SYNC_ALL_MUTEX_TYPES                        \
+    parking_timed_mutex_with_backoff,                    \
     nova::sync::parking_mutex<>,                         \
     nova::sync::parking_mutex<nova::sync::with_backoff>, \
     nova::sync::parking_mutex<nova::sync::timed>,        \
-    parking_timed_mutex_with_backoff,                    \
     nova::sync::ticket_mutex<>,                          \
     nova::sync::ticket_mutex<nova::sync::with_backoff>,  \
     nova::sync::spinlock_mutex<>,                        \

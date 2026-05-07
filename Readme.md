@@ -1,84 +1,60 @@
 # nova::sync
 
-Synchronization primitives for C++20: specialized mutex and event types optimized for different use cases.
+Synchronization primitives for C++20: specialized mutex, semaphore and event types optimized for different use cases.
+Most notably this includes variants which can be integrated into native event loops (Boost.Asio, libdispatch, epoll, Qt, etc.), allowing to wait asynchronously for a lock or event without blocking the thread.
 
 ## Mutex Types
 
-| Type | Characteristics | Named Requirement |
-|------|-----------------|-------------------|
-| `parking_mutex<>` | Futex-based mutex, parks immediately | `Mutex` |
-| `parking_mutex<with_backoff>` | Futex-based mutex, exponential backoff before parking | `Mutex` |
-| `parking_mutex<timed>` | Futex-based mutex, no spin, timed waits | `TimedMutex` |
-| `parking_mutex<timed, with_backoff>` | Futex-based mutex, exponential backoff, timed waits | `TimedMutex` |
-| `ticket_mutex<>` | Fair FIFO ticket lock, futex sleep | `TimedMutex` |
-| `ticket_mutex<with_backoff>` | Fair FIFO ticket lock with exponential backoff | `TimedMutex` |
-| `spinlock_mutex<>` | Spinlock, CPU-pause hints | `Mutex` |
-| `spinlock_mutex<with_backoff>` | Spinlock, exponential backoff | `Mutex` |
-| `spinlock_mutex<recursive>` | Recursive spinlock | `Mutex` |
-| `spinlock_mutex<recursive, with_backoff>` | Recursive spinlock with backoff | `Mutex` |
-| `spinlock_mutex<shared>` | Shared (reader-writer) spinlock | `SharedMutex` |
-| `spinlock_mutex<shared, with_backoff>` | Shared spinlock with exponential backoff | `SharedMutex` |
-| `pthread_spinlock_mutex` | `pthread_spinlock_t` based spinlock, POSIX only | `Mutex` |
-| `pthread_mutex<>` | POSIX `pthread_mutex_t` (default type) | `TimedMutex` |
-| `pthread_mutex<pthread_recursive>` | Recursive POSIX mutex | `TimedMutex` |
-| `pthread_mutex<pthread_errorcheck>` | Error-checking POSIX mutex | `TimedMutex` |
-| `pthread_mutex<pthread_adaptive>` | Adaptive-spin POSIX mutex (Linux) | `TimedMutex` |
-| `pthread_mutex<priority_inherit>` | POSIX mutex, priority inheritance (RT) | `TimedMutex` |
-| `pthread_mutex<priority_ceiling<N>>` | POSIX mutex, priority ceiling N (RT) | `TimedMutex` |
-| `win32_critical_section_mutex<>` | Win32 CRITICAL_SECTION, recursive, Windows only | `Mutex` |
-| `win32_critical_section_mutex<win32_spin_count<N>>` | Win32 CRITICAL_SECTION with custom spin count | `Mutex` |
-| `win32_mutex` | Win32 kernel mutex, async-capable, Windows only | `TimedMutex` |
-| `win32_srw_mutex` | Win32 SRW lock (ultra-lightweight), Windows only | `Mutex` |
-| `apple_os_unfair_mutex` | Apple `os_unfair_lock`, macOS/iOS only | `Mutex` |
-| `kqueue_mutex<>` | Apple kqueue-based async mutex | `TimedMutex` |
-| `kqueue_mutex<with_backoff>` | kqueue mutex with exponential backoff | `TimedMutex` |
-| `eventfd_mutex<>` | Linux eventfd-based async mutex | `TimedMutex` |
-| `eventfd_mutex<with_backoff>` | eventfd mutex with exponential backoff | `TimedMutex` |
-| `native_async_mutex` | Cross-platform alias: `win32_event_mutex` / `kqueue_mutex<with_backoff>` / `eventfd_mutex<with_backoff>` | `TimedMutex` |
-
-### Policy parameters
-
-All policy types live in `nova/sync/mutex/policies.hpp`:
-
-| Policy | Effect |
-|--------|--------|
-| `with_backoff` | Exponential backoff with CPU pause hints before blocking |
-| `recursive` | Allow re-entrant locking from the owning thread (`spinlock_mutex` only) |
-| `shared` | Enable shared (reader-writer) locking via `lock_shared()` (`spinlock_mutex` only; mutually exclusive with `recursive`) |
-| `priority_inherit` | PTHREAD_PRIO_INHERIT — owner boosted to highest waiter priority |
-| `priority_ceiling<N>` | PTHREAD_PRIO_PROTECT — all holders elevated to ceiling N |
-| `pthread_recursive` | PTHREAD_MUTEX_RECURSIVE — re-entrant locking |
-| `pthread_errorcheck` | PTHREAD_MUTEX_ERRORCHECK — error on double-lock |
-| `pthread_adaptive` | PTHREAD_MUTEX_ADAPTIVE_NP — adaptive spin (Linux only) |
-| `win32_spin_count<N>` | Spin count for `InitializeCriticalSectionAndSpinCount` |
-
-### Convenience aliases
-
-```cpp
-using pthread_default_mutex          = pthread_mutex<>;
-using pthread_recursive_mutex        = pthread_mutex< pthread_recursive >;
-using pthread_priority_inherit_mutex = pthread_mutex< priority_inherit >;
-template < int N >
-using pthread_priority_ceiling_mutex = pthread_mutex< priority_ceiling< N > >;
-```
-
 ### `parking_mutex`
-
-Futex-based mutex using `std::atomic::wait()`. Fast path acquires in one CAS; slow path parks the calling thread. With `with_backoff`, spins briefly before parking — lower latency under brief contention. Add `timed` to enable `try_lock_for` / `try_lock_until`.
+Futex-based mutex with configurable backoff.
+- **Policies**:
+  - `with_backoff`: Spins briefly with exponential backoff before parking, resulting in lower latency under brief contention.
+  - `timed`: Enables timed waits via `try_lock_for` / `try_lock_until`.
 
 ### `ticket_mutex`
+Fair FIFO ticket lock guaranteeing strict acquisition order. Prevents starvation under sustained contention, but is not suitable for high-throughput low-contention workloads.
+- **Policies**:
+  - `with_backoff`: Spins with exponential backoff before parking.
 
-FIFO ticket lock guaranteeing strict acquisition order. Prevents starvation under sustained contention. Not suitable for high-throughput low-contention workloads.
+### `spinlock_mutex`
+Spinlock with different customization options.
+- **Policies**:
+  - `with_backoff`: Enables exponential backoff.
+  - `recursive`: Allows re-entrant locking from the owning thread.
+  - `shared`: Enables shared (reader-writer) locking via `lock_shared()` (mutually exclusive with `recursive`).
 
-### POSIX mutexes
+### POSIX Mutexes
+POSIX wrappers available when targeting POSIX systems.
+- **`pthread_mutex`**: Wraps `pthread_mutex_t`.
+  - **Policies**:
+    - `pthread_recursive`: Enables re-entrant locking (`PTHREAD_MUTEX_RECURSIVE`).
+    - `pthread_errorcheck`: Emits an error on double-lock (`PTHREAD_MUTEX_ERRORCHECK`).
+    - `pthread_adaptive`: Enables adaptive-spin POSIX mutexes (Linux only, `PTHREAD_MUTEX_ADAPTIVE_NP`).
+    - `priority_inherit`: Priority inheritance protocol where the owner is boosted to the highest waiter priority (`PTHREAD_PRIO_INHERIT`).
+    - `priority_ceiling<N>`: Priority ceiling protocol where all holders are elevated to ceiling N (`PTHREAD_PRIO_PROTECT`).
+- **`pthread_spinlock_mutex`**: Wraps `pthread_spinlock_t`.
+- **`pthread_rwlock_mutex`**: Wraps `pthread_rwlock_t` for a POSIX reader-writer lock.
 
-`pthread_mutex<>` wraps `pthread_mutex_t`. Priority-protocol variants (`priority_inherit`, `priority_ceiling<N>`) prevent priority inversion in real-time systems — higher overhead; requires RT scheduling for ceiling variant.
+Note, `priority_inherit` and `priority_ceiling` policies typically require `CAP_SYS_NICE` or equivalent.
 
-### Platform-specific async mutexes
+### Windows Mutexes
+Mutexes provided by the Win32 runtime.
+- **`win32_critical_section_mutex`**: Wraps a Windows `CRITICAL_SECTION` (which is recursive by default).
+  - **Policies**: `win32_spin_count<N>` sets a custom spin count before falling back to a kernel wait.
+- **`win32_srw_mutex`**: Wraps the Slim Reader/Writer (SRW) lock for an ultra-lightweight Windows mutex.
 
-`win32_event_mutex`, `kqueue_mutex`, `eventfd_mutex` (and their `<with_backoff>` policy variants)
-expose native OS handles enabling integration with event loops (Boost.Asio, libdispatch, epoll, Qt, etc.).
-The `native_async_mutex` alias resolves to the fastest variant (`with_backoff`) for the current platform.
+### macOS / iOS Mutexes
+Mutexes provided by Apple's runtime.
+- **`apple_os_unfair_mutex`**: Wraps `os_unfair_lock`.
+
+### Platform-specific Async Mutexes
+`win32_event_mutex` (Windows), `kqueue_mutex` (macOS/iOS), and `eventfd_mutex` (Linux).
+These expose native OS handles (`native_handle()`) enabling integration with event loops (Boost.Asio, libdispatch, epoll, Qt, etc.).
+- **Policies**:
+  - `with_backoff`: Spins with exponential backoff before falling back to OS waits.
+- **Aliases**:
+  - `native_async_mutex`: Resolves to the pure async mutex for the current platform (e.g. `kqueue_mutex<>`).
+  - `native_fast_async_mutex`: Resolves to the async mutex with backoff for the current platform (e.g. `kqueue_mutex<with_backoff>`).
 
 Handlers receive an `expected<std::unique_lock<Mutex>, std::error_code>` (`std::expected` or `tl::expected`):
 
@@ -132,7 +108,7 @@ std::unique_lock lock = fut.get(); // blocks until acquired; lock.owns_lock() ==
 
 ### Thread Safety Analysis
 
- All mutex types are annotated for Clang's thread-safety analysis (`-Wthread-safety`). Macros in `<nova/sync/thread_safety/macros.hpp>` map to TSA attributes (e.g., `NOVA_SYNC_GUARDED_BY`, `NOVA_SYNC_REQUIRES`, `NOVA_SYNC_EXCLUDES`, `NOVA_SYNC_ACQUIRE`, `NOVA_SYNC_RELEASE`) on Clang and expand to nothing on other compilers.
+All mutex types are annotated for Clang's thread-safety analysis (`-Wthread-safety`). Macros in `<nova/sync/thread_safety/macros.hpp>` map to TSA attributes (e.g., `NOVA_SYNC_GUARDED_BY`, `NOVA_SYNC_REQUIRES`, `NOVA_SYNC_EXCLUDES`, `NOVA_SYNC_ACQUIRE`, `NOVA_SYNC_RELEASE`) on Clang and expand to nothing on other compilers.
 
 **Typical usage:**
 ```cpp
@@ -151,13 +127,7 @@ increment();      // Error: mutex not held
 
 ### `locked_object<T, Mutex>` — Rust-inspired Thread-Safe Value Wrapper
 
-Type-safe RAII wrapper pairing a value `T` with a `Mutex`, enforcing synchronized access at compile time. The value is only accessible through lock guards. Supports exclusive locking (mutual exclusion) and shared locking (read-write patterns with `std::shared_mutex` or compatible).
-
-**Lock guards:**
-- `locked_object_guard<T, M>`: Exclusive lock with constness determined by T template parameter
-- `shared_locked_object_guard<T, M>`: Shared lock (read-lock) with const access; requires `std::shared_mutex`
-
-**Key feature:** Const instances can acquire exclusive locks (enabling interior mutability patterns while maintaining thread safety).
+Type-safe RAII wrapper pairing a value `T` with a `Mutex`, enforcing synchronized via a smart-pointer style interface. The value is only accessible through lock guards. Supports exclusive locking (mutual exclusion) and shared locking (read-write patterns with `std::shared_mutex` or compatible).
 
 ```cpp
 #include <nova/sync/thread_safety/locked_object.hpp>
@@ -221,11 +191,11 @@ The following results were recorded on Ubuntu 25.04 on an Intel i7-14700K.
 
 Single-threaded benchmark:
 
-![Linux single-threaded benchmark](benchmarks/linux_intel_14700K_single-threaded.svg)
+![Linux single-threaded benchmark](benchmarks/linux_intel_14700K_mutex_benchmarks_single-threaded.svg)
 
 Multi-threaded benchmark:
 
-![Linux multi-threaded benchmark](benchmarks/linux_intel_14700K_multi-threaded.svg)
+![Linux multi-threaded benchmark](benchmarks/linux_intel_14700K_mutex_benchmarks_multi-threaded.svg)
 
 #### macOS - Apple M4 Pro
 
@@ -241,33 +211,33 @@ Multi-threaded benchmark:
 
 Single-threaded benchmark:
 
-![Windows single-threaded benchmark](benchmarks/win32_intel_14700K_single-threaded.svg)
+![Windows single-threaded benchmark](benchmarks/win32_intel_14700K_mutex_benchmarks_single-threaded.svg)
 
 Multi-threaded benchmark:
 
-![Windows multi-threaded benchmark](benchmarks/win32_intel_14700K_multi-threaded.svg)
+![Windows multi-threaded benchmark](benchmarks/win32_intel_14700K_mutex_benchmarks_multi-threaded.svg)
 
 
 ## Semaphore Types
 
-| Type | Timed waits | Native handle | Platform |
-|------|-------------|---------------|----------|
-| `fast_semaphore` | — | — | Cross-platform |
-| `timed_counting_semaphore` | `try_acquire_for` / `try_acquire_until` | — | Cross-platform |
-| `posix_semaphore` | `try_acquire_for` / `try_acquire_until` | — | Linux |
-| `win32_semaphore` | `try_acquire_for` / `try_acquire_until` | `native_handle()` | Windows |
-| `eventfd_semaphore` | `try_acquire_for` / `try_acquire_until` | `native_handle()` | Linux |
-| `kqueue_semaphore` | `try_acquire_for` / `try_acquire_until` | `native_handle()` | macOS/iOS |
-| `mach_semaphore` | `try_acquire_for` / `try_acquire_until` | — | macOS/iOS |
-| `dispatch_semaphore` | `try_acquire_for` / `try_acquire_until` | — | macOS/iOS |
-| `native_async_semaphore` | `try_acquire_for` / `try_acquire_until` | `native_handle()` | Platform-specific alias |
+### `parking_semaphore`
+Cross-platform lock-free counting semaphore based on futex.
+- **Policies**:
+  - `with_backoff`: Spins with exponential backoff before parking.
 
-### Platform-specific async semaphores
+### `timed_semaphore`
+- **`timed_semaphore`**: Timed futex-based semaphore.
+  - **Policies**: `with_backoff` enables exponential backoff.
 
-`win32_semaphore`, `eventfd_semaphore`, `kqueue_semaphore`, and `mach_semaphore` wrap OS primitives and expose `native_handle()` for integration with event loops (Boost.Asio, libdispatch, epoll, Qt, etc.).
+### Platform-specific Async Semaphores
+These variants wrap OS primitives and expose `native_handle()` for integration with event loops (Boost.Asio, libdispatch, epoll, Qt, etc.).
+- **Windows**: `win32_semaphore`.
+- **Linux**: `eventfd_semaphore`.
+- **macOS / iOS**: `kqueue_semaphore`.
+- **Aliases**: `native_async_semaphore` resolves to the async semaphore with a native handle for the platform.
 
 ```cpp
-nova::sync::counting_semaphore sem(0);
+nova::sync::parking_semaphore sem(0);
 
 // Producer thread
 sem.release(5);  // add 5 tokens
@@ -296,31 +266,28 @@ auto handle = nova::sync::async_acquire_cancellable(ioc, sem,
 handle.cancel();  // abort pending wait
 ```
 
-## Event Types
+### Other Platform-specific Semaphores
+- **Linux**: `posix_semaphore` (wrapper around `sem_t`).
+- **macOS / iOS**: `mach_semaphore` (wrapper around `semaphore_t`) and `dispatch_semaphore` (wrapper around `dispatch_semaphore_t`).
 
-| Type | Timed waits | Reset | Native handle |
-|------|-------------|-------|---------------|
-| `manual_reset_event` | — | Manual | — |
-| `timed_manual_reset_event` | `try_wait_for` / `try_wait_until` | Manual | — |
-| `native_manual_reset_event`| `try_wait_for` / `try_wait_until` | Manual | `native_handle()` |
-| `auto_reset_event` | — | Automatic | — |
-| `timed_auto_reset_event` | `try_wait_for` / `try_wait_until` | Automatic | — |
-| `native_auto_reset_event`  | `try_wait_for` / `try_wait_until` | Automatic | `native_handle()` |
 
-### Manual-reset events
+## Event Types (Auto-reset / Manual-reset)
 
+### Manual-reset Events
 Once `signal()` is called, all waiters are woken and subsequent `wait()` / `try_wait()` calls return immediately until `reset()` is called.
+- **`parking_manual_reset_event`**: Futex-based manual reset event.
+  - **Policies**: `with_backoff` enables exponential backoff.
+- **`native_manual_reset_event`**: Maps to OS primitives (`eventfd` on Linux, `kqueue` on macOS, `SetEvent` on Windows) and exposes `native_handle()` for integration with event loops.
 
-### Auto-reset events
-
+### Auto-reset Events
 Each `signal()` delivers exactly one token. A blocked waiter consumes it; otherwise the next `wait()` / `try_wait()` call consumes it.
-
-### Native events
-
-The `native_*` variants map to OS primitives (`eventfd` on Linux, `kqueue` on macOS, `SetEvent` on Windows) and expose `native_handle()` for integration with event loops, C++20 coroutines, or C++26 executors.
+- **`parking_auto_reset_event`**: Futex-based auto reset event.
+  - **Policies**: `with_backoff` enables exponential backoff.
+- **`timed_auto_reset_event`**: Supports timed waits.
+- **`native_auto_reset_event`**: Maps to OS primitives (`eventfd` on Linux, `kqueue` on macOS, `SetEvent` on Windows) and exposes `native_handle()` for integration with event loops.
 
 ```cpp
-nova::sync::manual_reset_event ev;
+nova::sync::parking_manual_reset_event ev;
 
 // Producer thread
 ev.signal();          // wake all waiters; event stays set
@@ -332,7 +299,7 @@ ev.reset();           // clear the event
 ```
 
 ```cpp
-nova::sync::auto_reset_event ev;
+nova::sync::parking_auto_reset_event ev;
 
 // Producer thread
 ev.signal();          // deliver one token

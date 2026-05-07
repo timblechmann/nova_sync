@@ -59,14 +59,16 @@
 // ---------------------------------------------------------------------------
 
 // clang-format off
-#define NOVA_SYNC_ALL_SEMAPHORE_TYPES                \
-    nova::sync::fast_semaphore,                      \
-    nova::sync::fast_timed_semaphore                 \
-    NOVA_SYNC_EVENTFD_SEMAPHORE_arg                  \
-    NOVA_SYNC_KQUEUE_SEMAPHORE_arg                   \
-    NOVA_SYNC_WIN32_SEMAPHORE_arg                    \
-    NOVA_SYNC_POSIX_SEMAPHORE_arg                    \
-    NOVA_SYNC_MACH_SEMAPHORE_arg                     \
+#define NOVA_SYNC_ALL_SEMAPHORE_TYPES                        \
+    nova::sync::parking_semaphore<>,                         \
+    nova::sync::parking_semaphore<nova::sync::with_backoff>, \
+    nova::sync::timed_semaphore<>,                           \
+    nova::sync::timed_semaphore<nova::sync::with_backoff>    \
+    NOVA_SYNC_EVENTFD_SEMAPHORE_arg                          \
+    NOVA_SYNC_KQUEUE_SEMAPHORE_arg                           \
+    NOVA_SYNC_WIN32_SEMAPHORE_arg                            \
+    NOVA_SYNC_POSIX_SEMAPHORE_arg                            \
+    NOVA_SYNC_MACH_SEMAPHORE_arg                             \
     NOVA_SYNC_DISPATCH_SEMAPHORE_arg
 // clang-format on
 
@@ -75,13 +77,14 @@
 // ---------------------------------------------------------------------------
 
 // clang-format off
-#define NOVA_SYNC_TIMED_SEMAPHORE_TYPES              \
-    nova::sync::fast_timed_semaphore                 \
-    NOVA_SYNC_EVENTFD_SEMAPHORE_arg                  \
-    NOVA_SYNC_KQUEUE_SEMAPHORE_arg                   \
-    NOVA_SYNC_WIN32_SEMAPHORE_arg                    \
-    NOVA_SYNC_POSIX_SEMAPHORE_arg                    \
-    NOVA_SYNC_MACH_SEMAPHORE_arg                     \
+#define NOVA_SYNC_TIMED_SEMAPHORE_TYPES                   \
+    nova::sync::timed_semaphore<>,                        \
+    nova::sync::timed_semaphore<nova::sync::with_backoff> \
+    NOVA_SYNC_EVENTFD_SEMAPHORE_arg                       \
+    NOVA_SYNC_KQUEUE_SEMAPHORE_arg                        \
+    NOVA_SYNC_WIN32_SEMAPHORE_arg                         \
+    NOVA_SYNC_POSIX_SEMAPHORE_arg                         \
+    NOVA_SYNC_MACH_SEMAPHORE_arg                          \
     NOVA_SYNC_DISPATCH_SEMAPHORE_arg
 // clang-format on
 

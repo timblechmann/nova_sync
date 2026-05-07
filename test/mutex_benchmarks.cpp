@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 // SPDX-FileCopyrightText: 2026 Tim Blechmann
 
+#include <barrier>
 #include <catch2/catch_all.hpp>
 
 #include <algorithm>
 #include <mutex>
+#include <shared_mutex>
 #include <thread>
 #include <vector>
 
@@ -12,7 +14,8 @@
 
 #ifdef NOVA_SYNC_HAS_QT
 #  include <QtCore/qmutex.h>
-#  define NOVA_SYNC_QT_MUTEX_TYPE , QMutex
+#  include <QtCore/qreadwritelock.h>
+#  define NOVA_SYNC_QT_MUTEX_TYPE , QMutex, QBasicReadWriteLock, QRecursiveMutex
 #else
 #  define NOVA_SYNC_QT_MUTEX_TYPE
 #endif
@@ -32,13 +35,15 @@ TEMPLATE_TEST_CASE( "mutex benchmarks",
                     std::timed_mutex,
                     std::recursive_mutex,
                     std::recursive_timed_mutex,
+                    std::shared_mutex,
+                    std::shared_timed_mutex,
                     NOVA_SYNC_ALL_MUTEX_TYPES NOVA_SYNC_QT_MUTEX_TYPE )
 {
     using mutex_t = TestType;
 
     SECTION( "single-threaded" )
     {
-        const int ops = 1000000;
+        const int ops = 100000;
 
         BENCHMARK( "single-threaded" )
         {
@@ -52,18 +57,20 @@ TEMPLATE_TEST_CASE( "mutex benchmarks",
         };
     }
 
-    SECTION( "multi-threaded" )
+    SECTION( "multi-threaded (8 threads)" )
     {
-        const unsigned threads        = std::max( 2u, std::thread::hardware_concurrency() );
-        const int      ops_per_thread = 10000; // keep total work reasonable
+        const unsigned threads        = 8;
+        const int      ops_per_thread = 5000; // keep total work reasonable
 
         BENCHMARK( "multi-threaded" )
         {
             mutex_t                    m;
             std::vector< std::thread > ths;
             ths.reserve( threads );
+            std::barrier sync( threads );
             for ( unsigned t = 0; t < threads; ++t ) {
                 ths.emplace_back( [ & ] {
+                    sync.arrive_and_wait();
                     for ( int i = 0; i < ops_per_thread; ++i ) {
                         m.lock();
                         work();
@@ -80,15 +87,17 @@ TEMPLATE_TEST_CASE( "mutex benchmarks",
     SECTION( "multi-threaded (high contention)" )
     {
         const unsigned threads        = std::max( 2u, std::thread::hardware_concurrency() * 2 );
-        const int      ops_per_thread = 10000; // keep total work reasonable
+        const int      ops_per_thread = 5000; // keep total work reasonable
 
         BENCHMARK( "multi-threaded (high contention)" )
         {
             mutex_t                    m;
             std::vector< std::thread > ths;
             ths.reserve( threads );
+            std::barrier sync( threads );
             for ( unsigned t = 0; t < threads; ++t ) {
                 ths.emplace_back( [ & ] {
+                    sync.arrive_and_wait();
                     for ( int i = 0; i < ops_per_thread; ++i ) {
                         m.lock();
                         work();

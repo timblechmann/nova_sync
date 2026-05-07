@@ -84,8 +84,6 @@ set(headers
     include/nova/sync/event/support/boost_asio_support.hpp
     include/nova/sync/event/support/libdispatch_support.hpp
     include/nova/sync/event/support/qt_support.hpp
-    include/nova/sync/event/timed_auto_reset_event.hpp
-    include/nova/sync/event/timed_manual_reset_event.hpp
     include/nova/sync/semaphore/concepts.hpp
     include/nova/sync/semaphore/detail/async_support.hpp
     include/nova/sync/semaphore/dispatch_semaphore.hpp
@@ -118,7 +116,6 @@ set(headers
     include/nova/sync/mutex/pthread_rwlock_mutex.hpp
     include/nova/sync/mutex/pthread_spinlock_mutex.hpp
 
-
     include/nova/sync/mutex/spinlock_mutex.hpp
     include/nova/sync/mutex/support/async_waiter_guard.hpp
     include/nova/sync/mutex/support/boost_asio_support.hpp
@@ -137,8 +134,6 @@ set(sources
     source/nova/sync/futex/atomic_wait.cpp
     source/nova/sync/event/native_auto_reset_event.cpp
     source/nova/sync/event/native_manual_reset_event.cpp
-    source/nova/sync/event/timed_auto_reset_event.cpp
-    source/nova/sync/event/timed_manual_reset_event.cpp
     source/nova/sync/semaphore/dispatch_semaphore.cpp
     source/nova/sync/semaphore/eventfd_semaphore.cpp
     source/nova/sync/semaphore/kqueue_semaphore.cpp

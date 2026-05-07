@@ -236,7 +236,7 @@ def plot_group_benchmarks(grouped, out_prefix, testcase_map=None):
                 1,
                 sharex=True,
                 gridspec_kw={"height_ratios": heights},
-                figsize=(max(8, width), max(3, 2 + k * 1.5)),
+                figsize=(width, height),
                 dpi=100,
                 layout='constrained',
             )
