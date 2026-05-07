@@ -7,8 +7,6 @@
 #include <nova/sync/event/native_manual_reset_event.hpp>
 #include <nova/sync/event/parking_auto_reset_event.hpp>
 #include <nova/sync/event/parking_manual_reset_event.hpp>
-#include <nova/sync/event/timed_auto_reset_event.hpp>
-#include <nova/sync/event/timed_manual_reset_event.hpp>
 
 #include <thread>
 
@@ -21,9 +19,9 @@
 
 TEMPLATE_TEST_CASE( "manual_reset_event benchmarks",
                     "[!benchmark]",
-                    nova::sync::manual_reset_event,
-                    nova::sync::native_manual_reset_event,
-                    nova::sync::timed_manual_reset_event )
+                    nova::sync::parking_manual_reset_event<>,
+                    nova::sync::parking_manual_reset_event< nova::sync::with_backoff >,
+                    nova::sync::native_manual_reset_event )
 {
     using event_t = TestType;
 
@@ -94,9 +92,9 @@ TEMPLATE_TEST_CASE( "manual_reset_event benchmarks",
 
 TEMPLATE_TEST_CASE( "auto_reset_event benchmarks",
                     "[!benchmark]",
-                    nova::sync::auto_reset_event,
-                    nova::sync::native_auto_reset_event,
-                    nova::sync::timed_auto_reset_event )
+                    nova::sync::parking_auto_reset_event<>,
+                    nova::sync::parking_auto_reset_event< nova::sync::with_backoff >,
+                    nova::sync::native_auto_reset_event )
 {
     using event_t = TestType;
 

@@ -26,13 +26,8 @@ namespace nova::sync {
 ///
 /// | Policy        | Effect                                                |
 /// |---------------|-------------------------------------------------------|
-/// | (no exponential_backoff)  | Park immediately when count is negative (default).    |
 /// | `with_backoff`| Spin with exponential backoff before parking.         |
 ///
-/// ### Aliases
-/// - `parking_semaphore<>`             — pure park, no spinning.
-/// - `parking_semaphore<with_backoff>` — spin-then-park.
-/// - `fast_semaphore`                  — deprecated alias for `parking_semaphore<>`.
 template < typename... Policies >
     requires( parameter::valid_parameters< detail::backoff_allowed_tags, Policies... > )
 class parking_semaphore
@@ -110,17 +105,11 @@ public:
 
 /// @brief Timed lock-free counting semaphore with optional exponential backoff.
 ///
-/// Adds `try_acquire_for` / `try_acquire_until` to `parking_semaphore`.
 ///
 /// | Policy        | Effect                                                |
 /// |---------------|-------------------------------------------------------|
-/// | (absence of `with_backoff`)  | Park immediately when count is negative (default).    |
 /// | `with_backoff`| Spin with exponential backoff before parking.         |
 ///
-/// ### Aliases
-/// - `timed_semaphore<>`             — pure park, no spinning.
-/// - `timed_semaphore<with_backoff>` — spin-then-park.
-/// - `fast_timed_semaphore`                  — deprecated alias for `timed_semaphore<>`.
 template < typename... Policies >
     requires( parameter::valid_parameters< detail::backoff_allowed_tags, Policies... > )
 class timed_semaphore
@@ -231,14 +220,5 @@ public:
         return try_acquire_until( std::chrono::steady_clock::now() + rel_time );
     }
 };
-
-//----------------------------------------------------------------------------------------------------------------------
-// Convenience aliases
-
-/// @brief Deprecated alias for `parking_semaphore<>` (pure park, no backoff).
-using fast_semaphore = parking_semaphore<>;
-
-/// @brief Deprecated alias for `timed_semaphore<>` (pure park, no backoff).
-using fast_timed_semaphore = timed_semaphore<>;
 
 } // namespace nova::sync

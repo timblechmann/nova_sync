@@ -29,7 +29,6 @@ namespace nova::sync {
 /// ### Aliases
 /// - `parking_auto_reset_event<>`             — pure park, no spinning.
 /// - `parking_auto_reset_event<with_backoff>` — spin-then-park.
-/// - `auto_reset_event`                       — deprecated alias for `parking_auto_reset_event<>`.
 template < typename... Policies >
     requires( parameter::valid_parameters< detail::backoff_allowed_tags, Policies... > )
 class parking_auto_reset_event
@@ -140,11 +139,5 @@ public:
         return try_wait_until( std::chrono::steady_clock::now() + rel_time );
     }
 };
-
-//----------------------------------------------------------------------------------------------------------------------
-// Convenience alias
-
-/// @brief Deprecated alias for `parking_auto_reset_event<>`.
-using auto_reset_event = parking_auto_reset_event<>;
 
 } // namespace nova::sync

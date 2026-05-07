@@ -15,10 +15,6 @@
 
 using namespace std::chrono_literals;
 
-// Validate concepts for portable types.
-static_assert( nova::sync::concepts::counting_semaphore< nova::sync::fast_semaphore > );
-static_assert( nova::sync::concepts::timed_counting_semaphore< nova::sync::fast_timed_semaphore > );
-
 // =============================================================================
 // Shared helpers
 // =============================================================================

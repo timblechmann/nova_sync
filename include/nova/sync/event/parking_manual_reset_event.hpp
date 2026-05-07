@@ -22,13 +22,11 @@ namespace nova::sync {
 ///
 /// | Policy        | Effect                                                 |
 /// |---------------|--------------------------------------------------------|
-/// | (no exponential_backoff)  | Park immediately when not set (default).               |
 /// | `with_backoff`| Spin with exponential backoff before parking.          |
 ///
 /// ### Aliases
 /// - `parking_manual_reset_event<>`             — pure park, no spinning.
 /// - `parking_manual_reset_event<with_backoff>` — spin-then-park.
-/// - `manual_reset_event`                       — deprecated alias for `parking_manual_reset_event<>`.
 template < typename... Policies >
     requires( parameter::valid_parameters< detail::backoff_allowed_tags, Policies... > )
 class parking_manual_reset_event
@@ -110,11 +108,5 @@ public:
         return try_wait_until( std::chrono::steady_clock::now() + rel_time );
     }
 };
-
-//----------------------------------------------------------------------------------------------------------------------
-// Convenience alias
-
-/// @brief Deprecated alias for `parking_manual_reset_event<>`.
-using manual_reset_event = parking_manual_reset_event<>;
 
 } // namespace nova::sync

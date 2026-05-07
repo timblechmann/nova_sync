@@ -18,8 +18,7 @@
 
 namespace nova::sync {
 
-/// Counting semaphore wrapping POSIX `sem_t`. Linux only (macOS has deprecated sem_init/sem_destroy).
-/// Supports timed waits via `sem_timedwait`.
+/// Counting semaphore wrapping POSIX `sem_t`.
 class posix_semaphore
 {
 public:

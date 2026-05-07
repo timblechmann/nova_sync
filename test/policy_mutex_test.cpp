@@ -50,19 +50,15 @@ static_assert( nova::sync::concepts::counting_semaphore< nova::sync::parking_sem
 static_assert( nova::sync::concepts::timed_counting_semaphore< nova::sync::timed_semaphore<> > );
 static_assert( nova::sync::concepts::timed_counting_semaphore< nova::sync::timed_semaphore< nova::sync::with_backoff > > );
 
-// Aliases
-static_assert( std::is_same_v< nova::sync::fast_semaphore, nova::sync::parking_semaphore<> > );
-static_assert( std::is_same_v< nova::sync::fast_timed_semaphore, nova::sync::timed_semaphore<> > );
-
 //----------------------------------------------------------------------------------------------------------------------
 // Concept checks: events
 
 static_assert( nova::sync::concepts::auto_reset_event< nova::sync::parking_auto_reset_event<> > );
 static_assert(
     nova::sync::concepts::auto_reset_event< nova::sync::parking_auto_reset_event< nova::sync::with_backoff > > );
-static_assert( nova::sync::concepts::auto_reset_event< nova::sync::auto_reset_event > );
+static_assert( nova::sync::concepts::auto_reset_event< nova::sync::parking_auto_reset_event<> > );
 
 static_assert( nova::sync::concepts::manual_reset_event< nova::sync::parking_manual_reset_event<> > );
 static_assert(
     nova::sync::concepts::manual_reset_event< nova::sync::parking_manual_reset_event< nova::sync::with_backoff > > );
-static_assert( nova::sync::concepts::manual_reset_event< nova::sync::manual_reset_event > );
+static_assert( nova::sync::concepts::manual_reset_event< nova::sync::parking_manual_reset_event<> > );

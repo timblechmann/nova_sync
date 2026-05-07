@@ -8,15 +8,13 @@
 #include <nova/sync/event/native_manual_reset_event.hpp>
 #include <nova/sync/event/parking_auto_reset_event.hpp>
 #include <nova/sync/event/parking_manual_reset_event.hpp>
-#include <nova/sync/event/timed_auto_reset_event.hpp>
-#include <nova/sync/event/timed_manual_reset_event.hpp>
 
 // Validate concepts for the concrete types we exercise in this test file.
-static_assert( nova::sync::concepts::manual_reset_event< nova::sync::manual_reset_event > );
-static_assert( nova::sync::concepts::timed_event< nova::sync::timed_manual_reset_event > );
+static_assert( nova::sync::concepts::manual_reset_event< nova::sync::parking_manual_reset_event<> > );
+static_assert( nova::sync::concepts::timed_event< nova::sync::parking_manual_reset_event<> > );
 static_assert( nova::sync::concepts::native_async_event< nova::sync::native_manual_reset_event > );
-static_assert( nova::sync::concepts::auto_reset_event< nova::sync::auto_reset_event > );
-static_assert( nova::sync::concepts::timed_event< nova::sync::timed_auto_reset_event > );
+static_assert( nova::sync::concepts::auto_reset_event< nova::sync::parking_auto_reset_event<> > );
+static_assert( nova::sync::concepts::timed_event< nova::sync::parking_auto_reset_event<> > );
 #if defined( _WIN32 )
 static_assert( nova::sync::concepts::native_async_event< nova::sync::native_auto_reset_event > );
 #else
@@ -52,8 +50,8 @@ struct thread_guard
 
 TEMPLATE_TEST_CASE( "manual_reset_event implementations",
                     "[manual_reset_event]",
-                    nova::sync::manual_reset_event,
-                    nova::sync::timed_manual_reset_event,
+                    nova::sync::parking_manual_reset_event<>,
+                    nova::sync::parking_manual_reset_event< nova::sync::with_backoff >,
                     nova::sync::native_manual_reset_event )
 {
     using event_t = TestType;
@@ -377,8 +375,8 @@ TEMPLATE_TEST_CASE( "manual_reset_event implementations",
 
 TEMPLATE_TEST_CASE( "manual_reset_event implementations (stress tests)",
                     "[manual_reset_event][stress]",
-                    nova::sync::manual_reset_event,
-                    nova::sync::timed_manual_reset_event,
+                    nova::sync::parking_manual_reset_event<>,
+                    nova::sync::parking_manual_reset_event< nova::sync::with_backoff >,
                     nova::sync::native_manual_reset_event )
 {
     using event_t = TestType;
@@ -430,8 +428,8 @@ TEMPLATE_TEST_CASE( "manual_reset_event implementations (stress tests)",
 
 TEMPLATE_TEST_CASE( "auto_reset_event implementations",
                     "[auto_reset_event]",
-                    nova::sync::auto_reset_event,
-                    nova::sync::timed_auto_reset_event,
+                    nova::sync::parking_auto_reset_event<>,
+                    nova::sync::parking_auto_reset_event< nova::sync::with_backoff >,
                     nova::sync::native_auto_reset_event )
 {
     using event_t = TestType;
@@ -585,8 +583,8 @@ TEMPLATE_TEST_CASE( "auto_reset_event implementations",
 
 TEMPLATE_TEST_CASE( "auto_reset_event implementations (stress tests)",
                     "[auto_reset_event][stress]",
-                    nova::sync::auto_reset_event,
-                    nova::sync::timed_auto_reset_event,
+                    nova::sync::parking_auto_reset_event<>,
+                    nova::sync::parking_auto_reset_event< nova::sync::with_backoff >,
                     nova::sync::native_auto_reset_event )
 {
     using event_t = TestType;
