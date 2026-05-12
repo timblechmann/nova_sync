@@ -80,7 +80,7 @@ inline constexpr bool has_priority_ceiling_v = parameter::has_parameter_v< tags:
 
 template < typename... Policies >
 inline constexpr int extract_priority_ceiling_v
-    = parameter::extract_integral_v< tags::priority_ceiling_tag, int, 0, Policies... >;
+    = parameter::extract_integral_or_v< tags::priority_ceiling_tag, int, 0, Policies... >;
 
 template < typename... Policies >
 inline constexpr bool has_pthread_errorcheck_v = parameter::has_parameter_v< tags::pthread_errorcheck_tag, Policies... >;

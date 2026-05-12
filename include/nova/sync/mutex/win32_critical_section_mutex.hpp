@@ -41,7 +41,7 @@ using win32_cs_allowed_tags = std::tuple< tags::win32_spin_count_tag >;
 
 template < typename... Policies >
 inline constexpr unsigned extract_win32_spin_count_v
-    = parameter::extract_integral_v< tags::win32_spin_count_tag, unsigned, 4000u, Policies... >;
+    = parameter::extract_integral_or_v< tags::win32_spin_count_tag, unsigned, 4000u, Policies... >;
 } // namespace win32_policy
 
 template < typename... Policies >
